@@ -1,24 +1,11 @@
-main()
-{
-    int firstNumber;
-    int secondNumber;
-    int result;
-    char operator;
-    firstNumber = 20;
-    secondNumber = 10;
-    operator = 42
+main() {
+    int fNumber, dNumber;
 
-    IF operator == 43 THEN
-    {
-        result = firstNumber + secondNumber;
-    }
-    ELSE {}
-
-    IF operator == 42 THEN
-    {
-        result = firstNumber * secondNumber;
+    IF fNumber * 2 + 10 > 100 THEN {
+        fNumber = 10;
+    } ELSE {
+        dNumber = 10;
     }
 
-    RETURN result;
-
+    RETURN fNumber;
 }
