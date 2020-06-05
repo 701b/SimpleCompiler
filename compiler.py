@@ -126,6 +126,13 @@ class Scanner:
         return self._tokens[index]
 
 
+class Parser:
+    """컴파일러의 구문 분석 단계를 담당하는 클래스
+
+    
+    """
+
+
 class InvalidCodeError(Exception):
     """소스 코드에 알 수 없는 토큰이 있을 때 발생하는 에러
 
