@@ -39,6 +39,11 @@ class Compiler:
             self._scanner.scan(file_path)
         except FileNotFoundError:
             log(Compiler.TAG, f"다음의 주소에서 파일을 읽지 못했습니다 : {file_path}")
+<<<<<<< Updated upstream
+=======
+        except InvalidTokenError as e:
+            print(e)
+>>>>>>> Stashed changes
 
 
 class Scanner:
@@ -100,6 +105,23 @@ class Scanner:
                         source_code_temp = source_code_temp.replace(result.group(), "", 1)
                         break
 
+<<<<<<< Updated upstream
+=======
+                if is_match is False:
+                    # 미리 정해진 정규 표현식에 패턴 매칭이 되지 않았다면, 공백과 문자열인지 확인한다.
+                    pattern = re.compile("\s|\n")
+                    result = pattern.match(source_code_temp)
+
+                    if result is not None:
+                        source_code_temp = source_code_temp.replace(result.group(), "", 1)
+                    if result is None:
+                        # 만약 공백과 문자열이 아니라면 에러를 발생시킨다.
+                        pattern = re.compile("[^\s\n]*")
+                        invalid_token = pattern.match(source_code_temp)
+
+                        raise InvalidTokenError(self._source_code, invalid_token.group())
+
+>>>>>>> Stashed changes
         log(Scanner.TAG, f"다음의 경로에서 소스 코드를 불러옵니다 : {file_path}")
         read_source_code_from(file_path)
         log(Scanner.TAG, f"읽어온 소스 코드::\n{self._source_code}\n")
@@ -114,3 +136,44 @@ class Scanner:
 
     def get_token(self, index: int) -> str:
         return self._tokens[index]
+<<<<<<< Updated upstream
+=======
+
+
+class InvalidTokenError(Exception):
+    """소스 코드에 알 수 없는 토큰이 있을 때 발생하는 에러
+
+    에러 발생 시 해석할 수 없는 토큰을 출력하고, 소스 코드에서 문제의 토큰이 있는 줄을 출력한다.
+    """
+
+    def __init__(self, source_code: str, invalid_token: str):
+        """생성자
+
+        Args:
+            source_code: 전체 소스 코드
+            invalid_token: 인식되지 않는 토큰 문자열
+        """
+        self.source_code = source_code
+        self.invalid_token = invalid_token
+
+    def __str__(self):
+        result_string = f"Compile Error >> 소스 코드에 알 수 없는 토큰이 있습니다 : '{self.invalid_token}'\n"
+        code_list = self.source_code.split("\n")
+        line_number = 1
+
+        for code in code_list:
+            temp = code.replace(self.invalid_token, "")
+
+            if len(temp) != len(code):
+                result_string += f"(line {line_number}) : {code}"
+                break
+
+            line_number += 1
+
+        return result_string
+
+
+compiler = Compiler()
+file_path = input()
+compiler.compile(file_path)
+>>>>>>> Stashed changes
