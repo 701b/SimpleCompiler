@@ -133,8 +133,7 @@ class InvalidCodeError(Exception):
     """
 
     def __init__(self, source_code: str, invalid_token: str):
-        """생성자
-
+        """
         Args:
             source_code: 전체 소스 코드
             invalid_token: 인식되지 않는 토큰 문자열
