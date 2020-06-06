@@ -19,6 +19,10 @@ class FileReader:
     """
 
     def __init__(self, file_path: str):
+        """
+        Args:
+            file_path: 읽을 파일의 주소
+        """
         self._file_path = file_path
 
     def read_all(self) -> str:
@@ -44,6 +48,10 @@ class FileWriter:
     """
 
     def __init__(self, file_path: str):
+        """
+        Args:
+            file_path: 쓰기 위해서 열 파일의 주소
+        """
         self._file_path = file_path
 
     def write(self, content: str) -> None:
