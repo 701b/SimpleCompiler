@@ -6,7 +6,7 @@ main()
     char operator;
     firstNumber = 20;
     secondNumber = 10;
-    operator = 42
+    operator = 42;
 
     IF operator == 43 THEN
     {
@@ -17,6 +17,11 @@ main()
     IF operator == 42 THEN
     {
         result = firstNumber * secondNumber;
+    } ELSE {}
+
+    WHILE firstNumber == 15
+    {
+        firstNumber = firstNumber + 1;
     }
 
     RETURN result;
