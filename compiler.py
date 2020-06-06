@@ -7,11 +7,15 @@ Student Name : 문태의, 성아영
 
 import re
 from filemanager import FileReader
+from datastructure import Stack, Queue
 
 
-def log(tag: str, content: str) -> None:
+TAG = "Compiler"
+
+
+def log(content: str) -> None:
     """터미널에 로그를 찍기 위한 함수"""
-    print(f"{tag} >> {content}")
+    print(f"{TAG} >> {content}")
 
 
 class Compiler:
@@ -22,10 +26,8 @@ class Compiler:
     compile 메서드를 통해 소스 파일의 코드를 타겟 코드로 컴파일한다.
     """
 
-    TAG = "Compiler"
-
     def __init__(self):
-        self._scanner = Scanner()
+        pass
 
     def compile(self, file_path: str) -> None:
         """컴파일을 시작하는 메서드
@@ -33,14 +35,20 @@ class Compiler:
         Args:
             file_path: 컴파일할 소스 코드가 작성된 파일의 주소
         """
+        scanner = Scanner()
 
         try:
-            log(Compiler.TAG, "컴파일을 시작합니다.")
-            self._scanner.scan(file_path)
+            log("컴파일을 시작합니다.")
+            scanner.scan(file_path)
         except FileNotFoundError:
-            log(Compiler.TAG, f"다음의 주소에서 파일을 읽지 못했습니다 : {file_path}")
+            log(f"다음의 주소에서 파일을 읽지 못했습니다 : {file_path}")
+            return
         except InvalidCodeError as e:
             print(e)
+            return
+
+        parser = Parser(scanner.get_token_queue())
+        parser.parse()
 
 
 class Scanner:
@@ -51,10 +59,24 @@ class Scanner:
 
     TAG = "Scanner"
 
-    REGULAR_EXPRESSION_OF_TOKEN = {'delimiter': '\(|\)|\{|\}|,|;',
-                                   'keyword': '(IF)|(ELSE)|(THEN)|(WHILE)',
-                                   'vtype': '(int)|(char)',
-                                   'operator': '=|==|>|\+|\*',
+    REGULAR_EXPRESSION_OF_TOKEN = {'(': '\(',
+                                   ')': '\)',
+                                   '{': '\{',
+                                   '}': '\}',
+                                   ',': ',',
+                                   ';': ';',
+                                   '==': '==',
+                                   '=': '=',
+                                   '>': '>',
+                                   '+': '\+',
+                                   '*': '\*',
+                                   'int': 'int',
+                                   'char': 'char',
+                                   'IF': 'IF',
+                                   'ELSE': 'ELSE',
+                                   'THEN': 'THEN',
+                                   'WHILE': 'WHILE',
+                                   'RETURN': 'RETURN',
                                    'word': '([a-z]|[A-Z])+',
                                    'num': '[0-9]+'}
 
@@ -94,7 +116,7 @@ class Scanner:
                     result = pattern.match(source_code_temp)
 
                     if result is not None:
-                        log(Scanner.TAG, f"{key}:{result.group()}")
+                        log(f"{key}:{result.group()}")
                         self._tokens.append(f"{key}:{result.group()}")
                         source_code_temp = source_code_temp.replace(result.group(), "", 1)
                         is_match = True
@@ -114,23 +136,138 @@ class Scanner:
 
                         raise InvalidCodeError(self._source_code, invalid_token.group())
 
-        log(Scanner.TAG, f"다음의 경로에서 소스 코드를 불러옵니다 : {file_path}")
+        log(f"다음의 경로에서 소스 코드를 불러옵니다 : {file_path}")
         read_source_code_from(file_path)
-        log(Scanner.TAG, f"읽어온 소스 코드::\n{self._source_code}\n")
+        log(f"읽어온 소스 코드::\n{self._source_code}\n")
 
-        log(Scanner.TAG, "준비된 코드를 토큰으로 분리합니다.")
+        log("준비된 코드를 토큰으로 분리합니다.")
         split_to_token()
-        log(Scanner.TAG, f"토큰 목록::\n{self._tokens}\n")
+        log(f"토큰 목록::\n{self._tokens}\n")
 
-    def get_token(self, index: int) -> str:
-        return self._tokens[index]
+    def get_token_queue(self) -> Queue:
+        """토큰이 담긴 Queue를 반환한다.
+
+        Returns: 토큰이 왼쪽부터 순서대로 담긴 Queue
+        """
+        queue = Queue()
+
+        for token in self._tokens:
+            queue.enqueue(token.split(":")[0])
+
+        queue.enqueue("$")
+
+        return queue
 
 
 class Parser:
     """컴파일러의 구문 분석 단계를 담당하는 클래스
 
-    
+    파싱 테이블을 토대로 토큰들을 분석한다.
     """
+
+    START_SYMBOL = "prog"
+
+    PARSING_TABLE = {"prog": {"word": ["word", "(", ")", "block"],
+                              "$": ["e"]},
+                     "decls": {"word": ["decls'"],
+                               "}": ["decls'"],
+                               "int": ["decls'"],
+                               "char": ["decls'"]},
+                     "decls'": {"word": ["e"],
+                                "}": ["e"],
+                                "IF": ["e"],
+                                "WHILE": ["e"],
+                                "RETURN": ["e"],
+                                "int": ["decl", "decls'"],
+                                "char": ["decl", "decls'"]},
+                     "decl": {"int": ["vtype", "words", ";"],
+                              "char": ["vtype", "words", ";"]},
+                     "words": {"word": ["word", "words'"]},
+                     "words'": {";": ["e"],
+                                ",": [",", "word", "words'"]},
+                     "vtype": {"word": ["e"],
+                               "int": ["int"],
+                               "char": ["char"]},
+                     "block": {"word": ["e"],
+                               "{": ["{", "decls", "slist", "}"],
+                               "}": ["e"],
+                               "IF": ["e"],
+                               "WHILE": ["e"],
+                               "RETURN": ["e"],
+                               "ELSE": ["e"],
+                               "$": ["e"]},
+                     "slist": {"word": ["slist'"],
+                               "}": ["slist'"],
+                               "IF": ["slist'"],
+                               "WHILE": ["slist'"],
+                               "RETURN": ["slist'"]},
+                     "slist'": {"word": ["stat", "slist'"],
+                                "}": ["e"],
+                                "IF": ["stat", "slist'"],
+                                "WHILE": ["stat", "slist'"],
+                                "RETURN": ["stat", "slist'"]},
+                     "stat": {"word": ["word", "=", "expr", ";"],
+                              "IF": ["IF", "cond", "THEN", "block", "ELSE", "block"],
+                              "WHILE": ["WHILE", "cond", "block"],
+                              "RETURN": ["RETURN", "expr", ";"]},
+                     "cond": {"word": ["expr", "expr'"],
+                              "num": ["expr", "expr'"]},
+                     "expr'": {"==": ["==", "expr"],
+                               ">": [">", "expr"]},
+                     "expr": {"word": ["term", "term'"],
+                              "num": ["term", "term'"]},
+                     "term'": {"+": ["+", "term"],
+                               "{": ["e"],
+                               ";": ["e"],
+                               "==": ["e"],
+                               ">": ["e"],
+                               "THEN": ["e"]},
+                     "term": {"word": ["fact", "fact'"],
+                              "num": ["fact", "fact'"]},
+                     "fact'": {"+": ["e"],
+                               "*": ["*", "fact"],
+                               "{": ["e"],
+                               ";": ["e"],
+                               "==": ["e"],
+                               ">": ["e"],
+                               "THEN": ["e"]},
+                     "fact": {"word": ["word"],
+                              "num": ["num"]}}
+
+    def __init__(self, token_queue: Queue):
+        self._token_queue = token_queue
+
+    def parse(self):
+        stack = Stack()
+        log(stack)
+        stack.push("$")
+        log(stack)
+        stack.push(Parser.START_SYMBOL)
+        log(stack)
+
+        log(f"queue : {self._token_queue}")
+        log(f"stack : {stack}")
+        log(f"work  : start\n")
+
+        while not stack.is_empty():
+            if self._token_queue.get() == stack.get():
+                self._token_queue.dequeue()
+                stack.pop()
+                log(f"queue : {self._token_queue}")
+                log(f"stack : {stack}")
+                log(f"work  : pop\n")
+            else:
+                symbol = stack.pop()
+                next_symbols = Parser.PARSING_TABLE[symbol][self._token_queue.get()]
+
+                if next_symbols[0] != 'e':
+                    # 역순으로 stack에 추가한다.
+                    for i in range(-1, -(len(next_symbols) + 1), -1):
+                        stack.push(next_symbols[i])
+
+                log(f"queue : {self._token_queue}")
+                log(f"stack : {stack}")
+                log(f"work  : {symbol} -> {next_symbols}\n")
 
 
 class InvalidCodeError(Exception):
