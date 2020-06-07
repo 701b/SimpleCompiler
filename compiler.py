@@ -35,10 +35,15 @@ class Compiler:
         Args:
             file_path: 컴파일할 소스 코드가 작성된 파일의 주소
         """
-        scanner = Scanner()
+        # file_path로 부터 소스 코드를 읽어온다.
+        log(f"다음의 경로에서 소스 코드를 불러옵니다 : {file_path}")
+        file_reader = FileReader(file_path)
+        source_code = file_reader.read_all()
+        log(f"읽어온 소스 코드::\n{source_code}\n")
+
+        scanner = Scanner(source_code)
 
         try:
-            log("컴파일을 시작합니다.")
             scanner.scan(file_path)
         except FileNotFoundError:
             log(f"다음의 주소에서 파일을 읽지 못했습니다 : {file_path}")
@@ -47,8 +52,9 @@ class Compiler:
             print(e)
             return
 
+        parser = Parser(scanner.get_token_queue(), source_code)
+
         try:
-            parser = Parser(scanner.get_token_queue(), scanner.source_code)
             parser.parse()
         except NotMatchedBraceError as e:
             print(e)
@@ -84,16 +90,15 @@ class Scanner:
                                    'word': '([a-z]|[A-Z])+',
                                    'num': '[0-9]+'}
 
-    def __init__(self):
-        self._source_code = ""
+    def __init__(self, source_code: str):
+        self._source_code = source_code
         self._tokens = []
 
     def scan(self, file_path: str) -> None:
         """어휘 분석을 시작하는 메서드
 
-        총 세 단계로 나뉘며, 그 단계는 다음과 같다.
-            * source code가 작성된 파일의 내용을 불러오는 단계
-            * 불러온 source code를 토큰으로 나누어 저장하는 단계
+        소스 코드로부터 토큰을 추출한다.
+        토큰은 Token클래스에 저장되어 token 리스트에 담긴다.
 
         Args:
             file_path: 분석할 소스 코드가 작성된 파일의 주소
@@ -103,57 +108,43 @@ class Scanner:
             InvalidCodeError: 소스 코드에 알 수 없는 기호가 있을 때 발생한다.
         """
 
-        def read_source_code_from(file_path: str) -> None:
-            """파일을 읽어온다."""
-            file_reader = FileReader(file_path)
-            self._source_code = file_reader.read_all()
-
-        def split_to_token() -> None:
-            """준비된 코드로부터 토큰을 추출한다.
-
-            토큰은 다음의 형태로 저장된다.
-            토큰:토큰 문자열:줄번호
-            """
-            source_code_temp = self._source_code
-            line_number = 1
-
-            while source_code_temp != "":
-                is_match = False
-
-                for key, value in Scanner.REGULAR_EXPRESSION_OF_TOKEN.items():
-                    pattern = re.compile(value)
-                    result = pattern.match(source_code_temp)
-
-                    if result is not None:
-                        log(f"{key}:{result.group()}")
-                        self._tokens.append(f"{key}:{result.group()}:{line_number}")
-                        source_code_temp = source_code_temp.replace(result.group(), "", 1)
-                        is_match = True
-                        break
-
-                if is_match is False:
-                    # 미리 정해진 정규 표현식에 패턴 매칭이 되지 않았다면, 공백과 줄바꿈인지 확인한다.
-                    pattern = re.compile("\s|\n")
-                    result = pattern.match(source_code_temp)
-
-                    if result is not None:
-                        source_code_temp = source_code_temp.replace(result.group(), "", 1)
-                        if result.group() == '\n':
-                            # 줄바꿈이라면 line_number에 1 추가
-                            line_number += 1
-                    if result is None:
-                        # 만약 공백과 문자열이 아니라면 에러를 발생시킨다.
-                        pattern = re.compile("[^\s\n]*")
-                        invalid_token = pattern.match(source_code_temp)
-
-                        raise InvalidTokenError(self._source_code, invalid_token.group(), line_number)
-
-        log(f"다음의 경로에서 소스 코드를 불러옵니다 : {file_path}")
-        read_source_code_from(file_path)
-        log(f"읽어온 소스 코드::\n{self._source_code}\n")
-
+        # 소스 코드로부터 토큰을 추출한다.
         log("준비된 코드를 토큰으로 분리합니다.")
-        split_to_token()
+        source_code_temp = self._source_code
+        line_number = 1
+
+        while source_code_temp != "":
+            is_match = False
+
+            for key, value in Scanner.REGULAR_EXPRESSION_OF_TOKEN.items():
+                pattern = re.compile(value)
+                result = pattern.match(source_code_temp)
+
+                if result is not None:
+                    log(f"{key}:{result.group()}")
+                    token = Token(key, result.group(), line_number)
+                    self._tokens.append(token)
+                    source_code_temp = source_code_temp.replace(result.group(), "", 1)
+                    is_match = True
+                    break
+
+            if is_match is False:
+                # 미리 정해진 정규 표현식에 패턴 매칭이 되지 않았다면, 공백과 줄바꿈인지 확인한다.
+                pattern = re.compile("\s|\n")
+                result = pattern.match(source_code_temp)
+
+                if result is not None:
+                    source_code_temp = source_code_temp.replace(result.group(), "", 1)
+                    if result.group() == '\n':
+                        # 줄바꿈이라면 line_number에 1 추가
+                        line_number += 1
+                if result is None:
+                    # 만약 공백과 문자열이 아니라면 에러를 발생시킨다.
+                    pattern = re.compile("[^\s\n]*")
+                    invalid_token = pattern.match(source_code_temp)
+
+                    raise InvalidTokenError(self._source_code, invalid_token.group(), line_number)
+
         log(f"토큰 목록::\n{self._tokens}\n")
 
     def get_token_queue(self) -> Queue:
@@ -164,12 +155,12 @@ class Scanner:
         queue = Queue()
 
         for token in self._tokens:
-            queue.enqueue(token.split(":"))
+            queue.enqueue(token)
 
         return queue
 
     @property
-    def source_code(self):
+    def source_code(self) -> str:
         return self._source_code
 
 
@@ -255,7 +246,9 @@ class Parser:
         PARSING_TABLE에 따라 parse한다.
         LL(1) parser의 원리를 사용한다.
         """
+        used_token_stack = Stack()
         stack = Stack()
+
         stack.push("$")
         stack.push(Parser.START_SYMBOL)
 
@@ -267,9 +260,9 @@ class Parser:
 
         try:
             while not stack.is_empty():
-                if self._token_queue.get()[0] == stack.get():
+                if self._token_queue.get().token == stack.get():
                     # 기호가 같을 때 pop
-                    self._token_queue.dequeue()
+                    used_token_stack.push(self._token_queue.dequeue())
                     stack.pop()
                     log(f"queue : {self._token_queue}")
                     log(f"stack : {stack}")
@@ -277,9 +270,10 @@ class Parser:
                 else:
                     # 기호가 다를 땐 확장
                     symbol = stack.pop()
-                    next_symbols = Parser.PARSING_TABLE[symbol][self._token_queue.get()[0]]
+                    next_symbols = Parser.PARSING_TABLE[symbol][self._token_queue.get().token]
 
                     if next_symbols[0] != 'e':
+                        # e는 엡실론으로 추가하지 않는다.
                         # 역순으로 stack에 추가한다.
                         for i in range(-1, -(len(next_symbols) + 1), -1):
                             stack.push(next_symbols[i])
@@ -293,12 +287,43 @@ class Parser:
 
             # 가장 먼저 발견되는 symbol을 기준으로 에러를 판단한다.
             for symbol in stack:
+                print(symbol)
                 if symbol == '}':
                     # stack에 오른쪽 중괄호가 남을 때
                     raise NotMatchedBraceError
                 if symbol == ';':
                     # stack에 세미 콜론이 남을 때
-                    pass
+                    raise NoSemiColonError(self._source_code, used_token_stack.get())
+
+
+class Token:
+    """토큰에 대한 정보를 저장하는 클래스"""
+
+    def __init__(self, token: str, token_string: str, line_number: int):
+        """
+        Args:
+            token: 토큰
+            token_string: 토큰에 대응하는 소스 코드 상의 문자열
+            line_number: 토큰이 위치한 소스 코드 상의 줄 번호
+        """
+        self._token = token
+        self._token_string = token_string
+        self._line_number = line_number
+
+    def __str__(self):
+        return self._token
+
+    @property
+    def token(self) -> str:
+        return self._token
+
+    @property
+    def token_string(self) -> str:
+        return self._token_string
+
+    @property
+    def line_number(self) -> int:
+        return self._line_number
 
 
 class InvalidTokenError(Exception):
@@ -339,7 +364,7 @@ class NotMatchedBraceError(Exception):
     """
 
     def __str__(self):
-        return "Compile Error >> 소스 코드에 중괄호가 서로 매칭되지 않습니다."
+        return "Compile Error >> 소스 코드에 중괄호가 서로 매칭되지 않습니다"
 
 
 class NoSemiColonError(Exception):
@@ -348,29 +373,27 @@ class NoSemiColonError(Exception):
     에러 발생 시 세미 콜론이 없음을 알리고, 소스 코드에서 필요한 부분을 표시한다.
     """
 
-    def __init__(self, source_code: str):
+    def __init__(self, source_code: str, token_before: Token):
         """
         Args:
             source_code: 전체 소스 코드
+            token_before: 세미 콜론이 있어야할 위치의 바로 앞 토큰
         """
         self._source_code = source_code
+        self._token_before = token_before
 
     def __str__(self):
-        result_string = "Compile Error >> 소스 코드에 다음의 기호가 없습니다. : ;\n"
+        result_string = "Compile Error >> 소스 코드의 다음 위치에 ';'가 필요합니다\n"
         code_list = self._source_code.split("\n")
-        line_number = 1
+        result_string += f"(line {self._token_before.line_number}):{code_list[self._token_before.line_number - 1]}\n"
 
-        for code in code_list:
-            temp = code.replace(";", "")
-
-            if len(temp) != len(code):
-                result_string += f"(line {line_number}) : {code}"
-                break
-
-            line_number += 1
+        # '^'로 표시
+        text_until_invalid_token = f"(line {self._token_before.line_number}):{code_list[self._token_before.line_number - 1]}\n".split(self._token_before.token_string)
+        for i in range(0, len(text_until_invalid_token[0]) + len(self._token_before.token_string)):
+            result_string += " "
+        result_string += "^"
 
         return result_string
-
 
 
 compiler = Compiler()

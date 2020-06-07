@@ -55,7 +55,7 @@ class Stack:
     def __next__(self):
         if self._current < len(self._stack):
             self._current += 1
-            return self._stack[self._current]
+            return self._stack[-self._current]
         else:
             raise StopIteration
 
@@ -102,7 +102,7 @@ class Queue:
         text = ""
 
         for data in self._queue:
-            text += data[0] + " "
+            text += f"{data} "
 
         return text
 
