@@ -59,6 +59,9 @@ class Compiler:
         except NotMatchedBraceError as e:
             print(e)
             return
+        except NoSemiColonError as e:
+            print(e)
+            return
 
 
 class Scanner:
@@ -246,7 +249,10 @@ class Parser:
         PARSING_TABLE에 따라 parse한다.
         LL(1) parser의 원리를 사용한다.
         """
+        # error handling을 위해 token이 담긴 queue에서 꺼낸 token들을 저장하는 stack
         used_token_stack = Stack()
+
+        # symbol을 관리할 stack
         stack = Stack()
 
         stack.push("$")
@@ -287,7 +293,6 @@ class Parser:
 
             # 가장 먼저 발견되는 symbol을 기준으로 에러를 판단한다.
             for symbol in stack:
-                print(symbol)
                 if symbol == '}':
                     # stack에 오른쪽 중괄호가 남을 때
                     raise NotMatchedBraceError
