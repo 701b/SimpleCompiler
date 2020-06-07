@@ -10,6 +10,7 @@ class Stack:
 
     def __init__(self):
         self._stack = []
+        self._current = 0
 
     def push(self, data) -> None:
         """스택에 데이터를 추가한다.
@@ -48,12 +49,23 @@ class Stack:
 
         return text
 
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self._current < len(self._stack):
+            self._current += 1
+            return self._stack[self._current]
+        else:
+            raise StopIteration
+
 
 class Queue:
     """자료구조 Queue의 기초적인 기능을 제공하는 클래스"""
 
     def __init__(self):
         self._queue = []
+        self._current = 0
 
     def enqueue(self, data) -> None:
         """큐에 데이터를 추가한다.
@@ -90,6 +102,16 @@ class Queue:
         text = ""
 
         for data in self._queue:
-            text += data + " "
+            text += data[0] + " "
 
         return text
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self._current < len(self._queue):
+            self._current += 1
+            return self._queue[self._current - 1]
+        else:
+            raise StopIteration
