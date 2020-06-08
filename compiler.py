@@ -248,6 +248,10 @@ class Parser:
         최초 기호와 마지막 기호가 담긴 stack과 Token들이 담긴 queue를 이용하여
         PARSING_TABLE에 따라 parse한다.
         LL(1) parser의 원리를 사용한다.
+
+        Raises:
+            NotMatchedBraceError: 구문 분석 중 중괄호가 맞지 않을 때 발생한다.
+            NoSemiColonError: 세미 콜론이 있어야할 위치에 없을 때 발생한다. 
         """
         # error handling을 위해 token이 담긴 queue에서 꺼낸 token들을 저장하는 stack
         used_token_stack = Stack()
