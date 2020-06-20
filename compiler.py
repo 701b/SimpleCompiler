@@ -57,10 +57,22 @@ class TokenNode:
         self._children = []
         self._current = 0
 
-    def add_child(self, child: Token):
+    def add_child(self, child: Token) -> None:
+        """token을 노드 클래스에 넣는 메서드
+
+        Args:
+            child: 추가할 토큰
+        """
         self._children.append(TokenNode(child))
 
     def get_child(self, index: int):
+        """자식 노드를 반환하는 클래스
+
+        Args:
+            index: 가져올 자식이 담긴 list의 index
+
+        Returns: 자식 노드 중 index번째 노드
+        """
         if index >= len(self._children):
             return None
 
@@ -157,6 +169,81 @@ class SyntaxTree:
                 else:
                     self._current = None
                     raise StopIteration
+
+
+class SymbolTable:
+    """심볼 테이블을 담당하는 클래스
+
+    add_symbol 메서드를 통해 추가할 수 있으며,
+    추가된 기호들은 0x00000000부터 순서대로 메모리 주소가 할당된다.
+    할당된 메모리는 search_address_of 메서드를 통해 찾을 수 있다.
+    """
+
+    BYTES_OF_INT = 4
+    BYTES_OF_CHAR = 1
+
+    def __init__(self):
+        self._symbol_table = pd.DataFrame({'identifier': [],
+                                           'type': [],
+                                           'block_number': [],
+                                           'size': [],
+                                           'address': []})
+        self._next_address = 0x00000000
+
+    def add_symbol(self, identifier: str, type: str, block_number: int):
+        """심볼 테이블에 심볼을 추가하는 메서드
+
+        Args:
+            identifier: 추가할 변수의 식별자
+            type: 추가할 변수의 타입
+            block_number: 추가할 변수가 속한 블록 번호
+
+        Raises:
+            RuntimeError: int, char 이외의 변수가 입력되는 경우 발생한다.
+        """
+        if type == 'int':
+            if self._next_address % SymbolTable.BYTES_OF_INT != 0:
+                self._next_address += SymbolTable.BYTES_OF_INT - self._next_address % SymbolTable.BYTES_OF_INT
+
+            self._symbol_table.loc[len(self._symbol_table)] = [identifier, type, block_number, SymbolTable.BYTES_OF_INT, self._next_address]
+            self._next_address += SymbolTable.BYTES_OF_INT
+        elif type == 'char':
+            self._symbol_table.loc[len(self._symbol_table)] = [identifier, type, block_number, SymbolTable.BYTES_OF_CHAR, self._next_address]
+            self._next_address += SymbolTable.BYTES_OF_CHAR
+        else:
+            # 이 에러가 일어나면 코딩이 잘못된 것
+            raise RuntimeError("Compiler >> Invalid type!")
+
+    def search_address_of(self, token: Token, block_number_stack: Stack) -> int:
+        """심볼 테이블에서 변수의 주소를 검색하는 메서드
+
+        Args:
+            token:
+            block_number_stack:
+
+        Returns: 심볼 테이블에서 탐색한 변수의 주소
+
+        Raises:
+
+        """
+        while True:
+            block_number = block_number_stack.pop()
+            search_result = self._symbol_table[self._symbol_table['identifier'] == token.token_string and self._symbol_table['block_number'] == block_number]
+
+            if len(search_result) > 1:
+                # 같은 범위에 같은 식별자의 변수가 중복됨.
+                raise RuntimeError("Compiler >> redundant variable")
+            elif len(search_result) == 1:
+                # 찾은 경우
+                return search_result[0][4]
+            else:
+                # 찾지 못한 경우
+                if not block_number_stack.is_empty():
+                    # 스택에 블록 넘버가 남은 경우
+                    continue
+                else:
+                    # 스택이 빈 경우 -> 정의된 변수가 없음
+                    raise RuntimeError("Compiler >> no variable defined")
 
 
 class Compiler:
@@ -507,14 +594,6 @@ class Parser:
         return syntax_tree
 
 
-class SymbolTable:
-
-    def __init__(self):
-        self._symbol_table = pd.DataFrame({'identifier': [],
-                                           'type': [],
-                                           'dimension': []})
-
-
 class InvalidTokenError(Exception):
     """어휘 분석 중 소스 코드에 알 수 없는 토큰이 있을 때 발생하는 에러
 
@@ -583,6 +662,8 @@ class NoSemiColonError(Exception):
         result_string += "^"
 
         return result_string
+
+
 
 
 compiler = Compiler()
