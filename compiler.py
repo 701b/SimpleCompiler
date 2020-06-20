@@ -305,6 +305,9 @@ class Compiler:
         except NoSemiColonError as e:
             print(e)
             return
+        except NotDefinedCompileError as e:
+            print(e)
+            return
 
 
 class Scanner:
@@ -439,9 +442,6 @@ class Parser:
     START_SYMBOL = "prog"
     END_SYMBOL = "$"
 
-    # 변수의 데이터 타입이 지정되지 않은 경우, 설정할 데이터 타입
-    DEFAULT_DATA_TYPE = "int"
-
     PARSING_TABLE = {"prog": {"word": ["word", "(", ")", "block"],
                               "$": ["e"]},
                      "decls": {"word": ["e"],
@@ -518,13 +518,14 @@ class Parser:
         Returns: SyntaxTree, SymbolTable로 구성된 list를 반환한다.
 
         Raises:
-            NoSemiColonError: 세미 콜론이 있어야할 위치에 없을 때 발생한다. 
+            NoSemiColonError: 세미 콜론이 있어야할 위치에 없을 때 발생한다.
+            NotDefinedCompileError: 에러를 파악할 수 없을 때 발생한다.
         """
         # Symbol Table
         symbol_table = SymbolTable(self._source_code)
 
         # 변수의 타입 기록
-        vtype = Parser.DEFAULT_DATA_TYPE
+        vtype = None
 
         # 현재 word가 변수 선언할 때의 식별자인지 기록
         is_decl_var = False
@@ -562,12 +563,12 @@ class Parser:
 
         try:
             while not stack.is_empty():
-                for tree_stack_node in parent_stack:
-                    log(f"stack node : {tree_stack_node.token_node.token}")
-                for token_node in syntax_tree:
-                    log(f"node : {token_node.token} '{token_node.token.token_string}'")
+                #for tree_stack_node in parent_stack:
+                #    log(f"stack node : {tree_stack_node.token_node.token}")
+                #for token_node in syntax_tree:
+                #    log(f"node : {token_node.token} '{token_node.token.token_string}'")
 
-                log(f"current node : {current_stack_node.token_node.token}")
+                #log(f"current node : {current_stack_node.token_node.token}")
 
                 if self._token_queue.get().token == stack.get():
                     # 기호가 같을 때 pop
@@ -578,9 +579,8 @@ class Parser:
                     # 토큰이 데이터 타입인 경우, 기록한다
                     if token.token == 'int' or token.token == 'char':
                         vtype = token.token
-                    # 토큰이 세미 콜론인 경우, 데이터 타입을 기본 데이터 타입으로 설정하고, 심볼 테이블에 추가하는 것을 그만둔다.
+                    # 토큰이 세미 콜론인 경우, 심볼 테이블에 추가하는 것을 그만둔다.
                     elif token.token == ';':
-                        vtype = Parser.DEFAULT_DATA_TYPE
                         is_decl_var = False
                     # 토큰이 word인 경우,
                     elif is_decl_var and token.token == 'word':
@@ -647,7 +647,7 @@ class Parser:
             if stack.get() == ';':
                 raise NoSemiColonError(self._source_code, used_token_stack.get())
 
-            print(f"Compile Error >> 정의되지 않은 에러 발생!")
+            raise NotDefinedCompileError()
 
         return [syntax_tree, symbol_table]
 
@@ -747,6 +747,13 @@ class NoVariableDeclarationError(CompileError):
 
     def __init__(self, source_code: str, error_token: Token):
         super().__init__(source_code, error_token, "다음 변수가 선언되지 않았습니다", True, True)
+
+
+class NotDefinedCompileError(CompileError):
+    """컴파일 중 발생한 에러이지만, 원인을 알 수 없을 때 발생하는 에러"""
+
+    def __init__(self):
+        super().__init__(None, None, "컴파일 중 에러가 발생하였으나, 원인을 알 수 없습니다")
 
 
 compiler = Compiler()
