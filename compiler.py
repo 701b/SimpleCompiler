@@ -22,16 +22,18 @@ def log(content: str) -> None:
 class Token:
     """토큰에 대한 정보를 저장하는 클래스"""
 
-    def __init__(self, token: str, token_string: str, line_number: int):
+    def __init__(self, token: str, token_string: str, line_number: int, block_number: int):
         """
         Args:
             token: 토큰 종류
             token_string: 토큰에 대응하는 소스 코드 상의 문자열
             line_number: 토큰이 위치한 소스 코드 상의 줄 번호
+            block_number: 토큰이 속한 가장 가까운 블록 번호
         """
         self._token = token
         self._token_string = token_string
         self._line_number = line_number
+        self._block_number = block_number
 
     def __str__(self):
         return self._token
@@ -47,6 +49,10 @@ class Token:
     @property
     def line_number(self) -> int:
         return self._line_number
+
+    @property
+    def block_number(self) -> int:
+        return self._block_number
 
 
 class TokenNode:
@@ -191,19 +197,18 @@ class SymbolTable:
                                            'address': []})
         self._next_address = 0x00000000
 
-    def add_symbol(self, token: Token, type: str, block_number: int) -> None:
+    def add_symbol(self, token: Token, type: str) -> None:
         """심볼 테이블에 심볼을 추가하는 메서드
 
         Args:
             token: 추가할 변수의 토큰
             type: 추가할 변수의 타입
-            block_number: 추가할 변수가 속한 블록 번호
 
         Raises:
             RedundantVariableDeclarationError: 심볼 테이블에 이미 같은 식별자, 블록 넘버의 심볼이 있을 때 발생한다.
             RuntimeError: int, char 이외의 변수가 입력되는 경우 발생한다.
         """
-        search_result = self._symbol_table[self._symbol_table['identifier'] == token.token_string and self._symbol_table['block_number'] == block_number]
+        search_result = self._symbol_table[(self._symbol_table['identifier'] == token.token_string) & (self._symbol_table['block_number'] == token.block_number)]
         if len(search_result) != 0:
             raise RedundantVariableDeclarationError(self._source_code, token)
 
@@ -211,10 +216,10 @@ class SymbolTable:
             if self._next_address % SymbolTable.BYTES_OF_INT != 0:
                 self._next_address += SymbolTable.BYTES_OF_INT - self._next_address % SymbolTable.BYTES_OF_INT
 
-            self._symbol_table.loc[len(self._symbol_table)] = [token.token_string, type, block_number, SymbolTable.BYTES_OF_INT, self._next_address]
+            self._symbol_table.loc[len(self._symbol_table)] = [token.token_string, type, token.block_number, SymbolTable.BYTES_OF_INT, self._next_address]
             self._next_address += SymbolTable.BYTES_OF_INT
         elif type == 'char':
-            self._symbol_table.loc[len(self._symbol_table)] = [token.token_string, type, block_number, SymbolTable.BYTES_OF_CHAR, self._next_address]
+            self._symbol_table.loc[len(self._symbol_table)] = [token.token_string, type, token.block_number, SymbolTable.BYTES_OF_CHAR, self._next_address]
             self._next_address += SymbolTable.BYTES_OF_CHAR
         else:
             # 이 에러가 일어나면 코딩이 잘못된 것
@@ -278,7 +283,7 @@ class Compiler:
         scanner = Scanner(source_code)
 
         try:
-            scanner.scan(file_path)
+            scanner.scan()
         except FileNotFoundError:
             log(f"다음의 주소에서 파일을 읽지 못했습니다 : {file_path}")
             return
@@ -292,7 +297,11 @@ class Compiler:
         parser = Parser(scanner.get_token_queue(), source_code)
 
         try:
-            syntax_tree = parser.parse()
+            list = parser.parse()
+            syntax_tree = list[0]
+            symbol_table = list[1]
+
+            print(symbol_table._symbol_table)
         except NoSemiColonError as e:
             print(e)
             return
@@ -331,20 +340,21 @@ class Scanner:
         self._source_code = source_code
         self._tokens = []
 
-    def scan(self, file_path: str) -> None:
+    def scan(self) -> None:
         """어휘 분석을 시작하는 메서드
 
         소스 코드로부터 토큰을 추출한다.
         토큰은 Token클래스에 저장되어 token 리스트에 담긴다.
-
-        Args:
-            file_path: 분석할 소스 코드가 작성된 파일의 주소
 
         Raises:
             FileNotFoundError: 인자로 받은 file_path로부터 파일을 읽지 못한 경우 발생한다.
             InvalidCodeError: 소스 코드에 알 수 없는 기호가 있을 때 발생한다.
             NotMatchedBraceError: 왼쪽과 오른쪽 중괄호 개수가 일치하지 않을 때 발생한다.
         """
+        # block_number을 지정하기 위한 숫자
+        # {를 만날 때 1이 증가된 블록 번호를 부여한다.
+        # 전역 범위는 블록 번호가 0이다.
+        block_number = 0
 
         # 소스 코드로부터 토큰을 추출한다.
         log("준비된 코드를 토큰으로 분리합니다.")
@@ -359,8 +369,12 @@ class Scanner:
                 result = pattern.match(source_code_temp)
 
                 if result is not None:
+                    # {를 만날 때 블록 번호를 1 증가시킨다.
+                    if result.group() == '{':
+                        block_number += 1
+
                     log(f"{key}:{result.group()}")
-                    token = Token(key, result.group(), line_number)
+                    token = Token(key, result.group(), line_number, block_number)
                     self._tokens.append(token)
                     source_code_temp = source_code_temp.replace(result.group(), "", 1)
                     is_match = True
@@ -425,6 +439,9 @@ class Parser:
     START_SYMBOL = "prog"
     END_SYMBOL = "$"
 
+    # 변수의 데이터 타입이 지정되지 않은 경우, 설정할 데이터 타입
+    DEFAULT_DATA_TYPE = "int"
+
     PARSING_TABLE = {"prog": {"word": ["word", "(", ")", "block"],
                               "$": ["e"]},
                      "decls": {"word": ["e"],
@@ -439,8 +456,7 @@ class Parser:
                      "words": {"word": ["word", "words'"]},
                      "words'": {";": ["e"],
                                 ",": [",", "word", "words'"]},
-                     "vtype": {"word": ["e"],
-                               "int": ["int"],
+                     "vtype": {"int": ["int"],
                                "char": ["char"]},
                      "block": {"word": ["e"],
                                "{": ["{", "decls", "slist", "}"],
@@ -492,17 +508,28 @@ class Parser:
         self._token_queue = token_queue
         self._source_code = source_code
 
-    def parse(self) -> SyntaxTree:
+    def parse(self) -> list:
         """Scanner로부터 받아온 Token들을 parse하는 메서드
 
         최초 기호와 마지막 기호가 담긴 stack과 Token들이 담긴 queue를 이용하여
         PARSING_TABLE에 따라 parse한다.
         LL parser의 원리를 사용한다.
 
+        Returns: SyntaxTree, SymbolTable로 구성된 list를 반환한다.
+
         Raises:
             NoSemiColonError: 세미 콜론이 있어야할 위치에 없을 때 발생한다. 
         """
-        # syntax tree
+        # Symbol Table
+        symbol_table = SymbolTable(self._source_code)
+
+        # 변수의 타입 기록
+        vtype = Parser.DEFAULT_DATA_TYPE
+
+        # 현재 word가 변수 선언할 때의 식별자인지 기록
+        is_decl_var = False
+
+        # Syntax Tree
         syntax_tree = SyntaxTree()
 
         # syntax tree에서 현재 접근 중인 노드의 스택 노드
@@ -520,14 +547,14 @@ class Parser:
         stack.push(Parser.END_SYMBOL)
         stack.push(Parser.START_SYMBOL)
 
-        root_node = TreeStackNode(TokenNode(Token(Parser.TOTAL_SYMBOL, None, None)))
-        root_node.token_node.add_child(Token(Parser.START_SYMBOL, None, None))
-        root_node.token_node.add_child(Token(Parser.END_SYMBOL, None, None))
+        root_node = TreeStackNode(TokenNode(Token(Parser.TOTAL_SYMBOL, None, None, 0)))
+        root_node.token_node.add_child(Token(Parser.START_SYMBOL, None, None, 0))
+        root_node.token_node.add_child(Token(Parser.END_SYMBOL, None, None, 0))
         syntax_tree.root = root_node.token_node
         parent_stack.push(root_node)
         current_stack_node = TreeStackNode(root_node.token_node.get_child(root_node.next_child()))
 
-        self._token_queue.enqueue(Token(Parser.END_SYMBOL, "", 0))
+        self._token_queue.enqueue(Token(Parser.END_SYMBOL, "", 0, 0))
 
         log(f"queue : {self._token_queue}")
         log(f"stack : {stack}")
@@ -547,6 +574,17 @@ class Parser:
                     token = self._token_queue.dequeue()
                     used_token_stack.push(token)
                     stack.pop()
+
+                    # 토큰이 데이터 타입인 경우, 기록한다
+                    if token.token == 'int' or token.token == 'char':
+                        vtype = token.token
+                    # 토큰이 세미 콜론인 경우, 데이터 타입을 기본 데이터 타입으로 설정하고, 심볼 테이블에 추가하는 것을 그만둔다.
+                    elif token.token == ';':
+                        vtype = Parser.DEFAULT_DATA_TYPE
+                        is_decl_var = False
+                    # 토큰이 word인 경우,
+                    elif is_decl_var and token.token == 'word':
+                        symbol_table.add_symbol(token, vtype)
 
                     # syntax tree의 현재 접근 중인 노드를 queue에서 빠진 token로 교체한다.
                     current_stack_node.token_node.token = token
@@ -570,6 +608,10 @@ class Parser:
                     symbol = stack.pop()
                     next_symbols = Parser.PARSING_TABLE[symbol][self._token_queue.get().token]
 
+                    # 기호가 decl인 경우, 변수 선언으로 간주하고 앞으로 나오는 word들을 심볼 테이블에 추가한다.
+                    if symbol == 'decl':
+                        is_decl_var = True
+
                     if next_symbols[0] != 'e':
                         # e는 엡실론으로 추가하지 않는다.
                         # 역순으로 stack에 추가한다.
@@ -578,7 +620,7 @@ class Parser:
 
                         # 원래 순서로 syntax tree의 현재 접근 중인 노드의 child로 추가한다.
                         for i in range(0, len(next_symbols)):
-                            current_stack_node.token_node.add_child(Token(next_symbols[i], None, None))
+                            current_stack_node.token_node.add_child(Token(next_symbols[i], None, None, 0))
 
                         # 부모 스택에 현재 스택 노드를 추가한 후 첫번째 child로 이동
                         parent_stack.push(current_stack_node)
@@ -607,10 +649,11 @@ class Parser:
 
             print(f"Compile Error >> 정의되지 않은 에러 발생!")
 
-        return syntax_tree
+        return [syntax_tree, symbol_table]
 
 
 class CompileError(Exception):
+    """컴파일 에러를 다루는 클래스"""
 
     def __init__(self, source_code:str, error_token: Token, error_sentence = "", do_show_token = False, do_mark = False, do_mark_at_last = False):
         """
