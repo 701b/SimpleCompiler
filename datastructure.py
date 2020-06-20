@@ -57,6 +57,7 @@ class Stack:
             self._current += 1
             return self._stack[-self._current]
         else:
+            self._current = 0
             raise StopIteration
 
 
@@ -114,4 +115,5 @@ class Queue:
             self._current += 1
             return self._queue[self._current - 1]
         else:
+            self._current = 0
             raise StopIteration

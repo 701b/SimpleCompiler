@@ -6,6 +6,7 @@ Student Name : 문태의, 성아영
 """
 
 import re
+import pandas as pd
 from filemanager import FileReader
 from datastructure import Stack, Queue
 
@@ -16,6 +17,146 @@ TAG = "Compiler"
 def log(content: str) -> None:
     """터미널에 로그를 찍기 위한 함수"""
     print(f"{TAG} >> {content}")
+
+
+class Token:
+    """토큰에 대한 정보를 저장하는 클래스"""
+
+    def __init__(self, token: str, token_string: str, line_number: int):
+        """
+        Args:
+            token: 토큰 종류
+            token_string: 토큰에 대응하는 소스 코드 상의 문자열
+            line_number: 토큰이 위치한 소스 코드 상의 줄 번호
+        """
+        self._token = token
+        self._token_string = token_string
+        self._line_number = line_number
+
+    def __str__(self):
+        return self._token
+
+    @property
+    def token(self) -> str:
+        return self._token
+
+    @property
+    def token_string(self) -> str:
+        return self._token_string
+
+    @property
+    def line_number(self) -> int:
+        return self._line_number
+
+
+class TokenNode:
+    """token을 tree에 넣기 위한 클래스"""
+
+    def __init__(self, token: Token):
+        self._token = token
+        self._children = []
+        self._current = 0
+
+    def add_child(self, child: Token):
+        self._children.append(TokenNode(child))
+
+    def get_child(self, index: int):
+        if index >= len(self._children):
+            return None
+
+        return self._children[index]
+
+    @property
+    def token(self):
+        return self._token
+
+    @token.setter
+    def token(self, token: Token):
+        self._token = token
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self._current < len(self._children):
+            self._current += 1
+            return self._children[self._current - 1]
+        else:
+            raise StopIteration
+
+
+class TreeStackNode:
+    """순회를 위해 부모에 대한 상태를 저장하는 노드
+
+    next_child 메서드를 통해 몇번 째 자식으로 접근해야하는지 알려준다.
+    """
+
+    def __init__(self, token_node: TokenNode):
+        self._token_node = token_node
+        self._child_index = 0
+
+    def next_child(self):
+        self._child_index += 1
+        return self._child_index - 1
+
+    @property
+    def token_node(self) -> TokenNode:
+        return self._token_node
+
+
+class SyntaxTree:
+    """코드의 구문을 저장한 트리
+
+    구문 분석 단계의 결과로 생성된다.
+
+    in 키워드로 반복문을 사용하면 preorder로 순회한다.
+    트리 예시)
+                                 total
+                     prog                       $
+        word   (  )        block
+
+    순서 예시)
+        total - prog - word - ( - ) - block - $
+    """
+
+    def __init__(self):
+        self._root: TokenNode = None
+        self._parent_stack = Stack()
+        self._current: TreeStackNode = None
+
+    @property
+    def root(self) -> TokenNode:
+        return self._root
+
+    @root.setter
+    def root(self, token_node: TokenNode):
+        self._root = token_node
+
+    def __iter__(self):
+        return self
+
+    def __next__(self) -> TokenNode:
+        if self._current is None:
+            if self._root is not None:
+                self._current = TreeStackNode(self._root)
+                return self._current.token_node
+            else:
+                raise StopIteration
+
+        while True:
+            child = self._current.next_child()
+
+            if self._current.token_node.get_child(child) is not None:
+                self._parent_stack.push(self._current)
+                self._current = TreeStackNode(self._current.token_node.get_child(child))
+                return self._current.token_node
+            else:
+                if not self._parent_stack.is_empty():
+                    self._current = self._parent_stack.pop()
+                    continue
+                else:
+                    self._current = None
+                    raise StopIteration
 
 
 class Compiler:
@@ -55,7 +196,7 @@ class Compiler:
         parser = Parser(scanner.get_token_queue(), source_code)
 
         try:
-            parser.parse()
+            syntax_tree = parser.parse()
         except NotMatchedBraceError as e:
             print(e)
             return
@@ -173,7 +314,9 @@ class Parser:
     파싱 테이블을 토대로 토큰들을 분석한다.
     """
 
+    TOTAL_SYMBOL = "total"
     START_SYMBOL = "prog"
+    END_SYMBOL = "$"
 
     PARSING_TABLE = {"prog": {"word": ["word", "(", ")", "block"],
                               "$": ["e"]},
@@ -182,8 +325,8 @@ class Parser:
                                "IF": ["e"],
                                "WHILE": ["e"],
                                "RETURN": ["e"],
-                               "int": ["decl", "decls'"],
-                               "char": ["decl", "decls'"]},
+                               "int": ["decl", "decls"],
+                               "char": ["decl", "decls"]},
                      "decl": {"int": ["vtype", "words", ";"],
                               "char": ["vtype", "words", ";"]},
                      "words": {"word": ["word", "words'"]},
@@ -242,7 +385,7 @@ class Parser:
         self._token_queue = token_queue
         self._source_code = source_code
 
-    def parse(self) -> None:
+    def parse(self) -> SyntaxTree:
         """Scanner로부터 받아온 Token들을 parse하는 메서드
 
         최초 기호와 마지막 기호가 담긴 stack과 Token들이 담긴 queue를 이용하여
@@ -253,16 +396,32 @@ class Parser:
             NotMatchedBraceError: 구문 분석 중 중괄호가 맞지 않을 때 발생한다.
             NoSemiColonError: 세미 콜론이 있어야할 위치에 없을 때 발생한다. 
         """
+        # syntax tree
+        syntax_tree = SyntaxTree()
+
+        # syntax tree에서 현재 접근 중인 노드의 스택 노드
+        current_stack_node: TreeStackNode = None
+
+        # syntax tree에서 현재 접근 중인 노드의 부모 스택
+        parent_stack = Stack()
+
         # error handling을 위해 token이 담긴 queue에서 꺼낸 token들을 저장하는 stack
         used_token_stack = Stack()
 
         # symbol을 관리할 stack
         stack = Stack()
 
-        stack.push("$")
+        stack.push(Parser.END_SYMBOL)
         stack.push(Parser.START_SYMBOL)
 
-        self._token_queue.enqueue("$")
+        root_node = TreeStackNode(TokenNode(Token(Parser.TOTAL_SYMBOL, None, None)))
+        root_node.token_node.add_child(Token(Parser.START_SYMBOL, None, None))
+        root_node.token_node.add_child(Token(Parser.END_SYMBOL, None, None))
+        syntax_tree.root = root_node.token_node
+        parent_stack.push(root_node)
+        current_stack_node = TreeStackNode(root_node.token_node.get_child(root_node.next_child()))
+
+        self._token_queue.enqueue(Token(Parser.END_SYMBOL, "", 0))
 
         log(f"queue : {self._token_queue}")
         log(f"stack : {stack}")
@@ -270,10 +429,33 @@ class Parser:
 
         try:
             while not stack.is_empty():
+                for tree_stack_node in parent_stack:
+                    log(f"stack node : {tree_stack_node.token_node.token}")
+                for token_node in syntax_tree:
+                    log(f"node : {token_node.token} '{token_node.token.token_string}'")
+
+                log(f"current node : {current_stack_node.token_node.token}")
+
                 if self._token_queue.get().token == stack.get():
                     # 기호가 같을 때 pop
-                    used_token_stack.push(self._token_queue.dequeue())
+                    token = self._token_queue.dequeue()
+                    used_token_stack.push(token)
                     stack.pop()
+
+                    # syntax tree의 현재 접근 중인 노드를 queue에서 빠진 token로 교체한다.
+                    current_stack_node.token_node.token = token
+
+                    # 부모로 올라가 다음 child로 이동한다.
+                    if not token.token == Parser.END_SYMBOL:
+                        while True:
+                            current_stack_node = parent_stack.pop()
+                            next_child = current_stack_node.token_node.get_child(current_stack_node.next_child())
+
+                            if next_child is not None:
+                                parent_stack.push(current_stack_node)
+                                current_stack_node = TreeStackNode(next_child)
+                                break
+
                     log(f"queue : {self._token_queue}")
                     log(f"stack : {stack}")
                     log(f"work  : pop\n")
@@ -287,6 +469,24 @@ class Parser:
                         # 역순으로 stack에 추가한다.
                         for i in range(-1, -(len(next_symbols) + 1), -1):
                             stack.push(next_symbols[i])
+
+                        # 원래 순서로 syntax tree의 현재 접근 중인 노드의 child로 추가한다.
+                        for i in range(0, len(next_symbols)):
+                            current_stack_node.token_node.add_child(Token(next_symbols[i], None, None))
+
+                        # 부모 스택에 현재 스택 노드를 추가한 후 첫번째 child로 이동
+                        parent_stack.push(current_stack_node)
+                        current_stack_node = TreeStackNode(current_stack_node.token_node.get_child(current_stack_node.next_child()))
+                    else:
+                        # 부모로 올라가 다음 child로 이동한다.
+                        while True:
+                            current_stack_node = parent_stack.pop()
+                            next_child = current_stack_node.token_node.get_child(current_stack_node.next_child())
+
+                            if next_child is not None:
+                                parent_stack.push(current_stack_node)
+                                current_stack_node = TreeStackNode(next_child)
+                                break
 
                     log(f"queue : {self._token_queue}")
                     log(f"stack : {stack}")
@@ -304,35 +504,15 @@ class Parser:
                     # stack에 세미 콜론이 남을 때
                     raise NoSemiColonError(self._source_code, used_token_stack.get())
 
+        return syntax_tree
 
-class Token:
-    """토큰에 대한 정보를 저장하는 클래스"""
 
-    def __init__(self, token: str, token_string: str, line_number: int):
-        """
-        Args:
-            token: 토큰
-            token_string: 토큰에 대응하는 소스 코드 상의 문자열
-            line_number: 토큰이 위치한 소스 코드 상의 줄 번호
-        """
-        self._token = token
-        self._token_string = token_string
-        self._line_number = line_number
+class SymbolTable:
 
-    def __str__(self):
-        return self._token
-
-    @property
-    def token(self) -> str:
-        return self._token
-
-    @property
-    def token_string(self) -> str:
-        return self._token_string
-
-    @property
-    def line_number(self) -> int:
-        return self._line_number
+    def __init__(self):
+        self._symbol_table = pd.DataFrame({'identifier': [],
+                                           'type': [],
+                                           'dimension': []})
 
 
 class InvalidTokenError(Exception):
