@@ -10,7 +10,6 @@ import pandas as pd
 from filemanager import FileReader
 from datastructure import Stack, Queue
 
-
 TAG = "Compiler"
 
 
@@ -197,6 +196,8 @@ class Compiler:
 
         try:
             syntax_tree = parser.parse()
+            Syntax_tree_Optimization(syntax_tree)
+
         except NotMatchedBraceError as e:
             print(e)
             return
@@ -306,6 +307,134 @@ class Scanner:
     @property
     def source_code(self) -> str:
         return self._source_code
+
+
+class Instruction:
+
+    # Load num into R1
+    def LD(self, R1, num):
+        return f"LD\t{R1}  {num}"
+
+    # Store value of R1 into var
+    def ST(self, R1, var):
+        return f"ST\t{R1}  {var}"
+
+    # R1 = R2 + R3
+    def ADD(self, R1, R2, R3):
+        return f"ADD\t{R1}  {R2}  {R3}"
+
+    # R1 = R2 * R3
+    def MUL(self, R1, R2, R3):
+        return f"MUL\t{R1}  {R2}  {R3}"
+
+    # if R2 < R3 : 1, else : 0
+    def LT(self, R1, R2, R3):
+        return f"LT\t{R1}  {R2}  {R3}"
+
+    # jump to label if R1 is 0
+    def JUMPF(self, R1, label):
+        return f"JUMPF\t{R1}  {label}"
+
+    # jump to label if R1 is not 0
+    def JUMPT(self, R1, label):
+        return f"JUMPT\t{R1}  {label}"
+
+    # jump to label without condition
+    def JUMP(self, label):
+        return f"JUMP\t{label}"
+
+    def IsEqual(self, R1, R2, label):
+        Code = []
+        Nega = -1
+        Code.append(Instruction.MUL(R2, R2, Nega))
+        Code.append(Instruction.ADD(R1, R1, R2))
+        Code.append(Instruction.JUMPF(R1, label))
+
+        return Code
+
+
+
+def Syntax_tree_Optimization(syntax_tree):
+    Code = []
+
+    TreeStack = Stack()
+
+    for token in syntax_tree:
+        if token.token.token == "stat":
+            TreeStack.push(token.token.token)
+
+        if TreeStack.is_empty():
+            continue
+        elif TreeStack.get() == "stat":
+            if token.token.token == "WHILE" or token.token.token == "IF" or token.token.token == "RETURN":
+                Code.append(token.token.token)
+                TreeStack.push(token.token.token)
+            if token.token.token == "word":
+                Code.append(token.token.token_string)
+                TreeStack.push(token.token.token)
+
+        elif TreeStack.get() == "WHILE":
+            if token.token.token == "cond":
+                Code.append(token.token.token)
+                TreeStack.push(token.token.token)
+
+
+        elif TreeStack.get() == "cond":
+            if token.token.token is not "block" and token.token.token is not "THEN":
+                if token.token.token_string is not None:
+                    Code.append(token.token.token_string)
+            if token.token.token == "block":
+                TreeStack.pop()
+                Code.append(token.token.token)
+                TreeStack.push(token.token.token)
+            if token.token.token == "THEN":
+                TreeStack.pop()
+                Code.append(token.token.token)
+                TreeStack.push(token.token.token)
+
+        elif TreeStack.get() == "block":
+            if token.token.token == "}":
+                TreeStack.pop()
+
+        elif TreeStack.get() == "IF":
+            if token.token.token == "cond":
+                Code.append(token.token.token)
+                TreeStack.push(token.token.token)
+
+            if token.token.token == "ELSE":
+                Code.append(token.token.token)
+                TreeStack.push(token.token.token)
+
+        elif TreeStack.get() == "THEN":
+            if token.token.token == "block":
+                TreeStack.pop()
+                Code.append(token.token.token)
+                TreeStack.push(token.token.token)
+
+        elif TreeStack.get() == "ELSE":
+            if token.token.token == "block":
+                TreeStack.pop()
+                Code.append(token.token.token)
+                TreeStack.push(token.token.token)
+
+        elif TreeStack.get() == 'word':
+            if token.token.token == ";":
+                TreeStack.pop()
+                continue
+            if token.token.token_string is not None:
+                Code.append(token.token.token_string)
+
+        elif TreeStack.get() == "RETURN":
+            if token.token.token == ";":
+                TreeStack.pop()
+                continue
+            if token.token.token_string is not None:
+                Code.append(token.token.token_string)
+    CodeGenerator(Code)
+
+def CodeGenerator(Code):
+    log(f"code : {Code}")
+
 
 
 class Parser:
@@ -429,12 +558,12 @@ class Parser:
 
         try:
             while not stack.is_empty():
-                for tree_stack_node in parent_stack:
-                    log(f"stack node : {tree_stack_node.token_node.token}")
-                for token_node in syntax_tree:
-                    log(f"node : {token_node.token} '{token_node.token.token_string}'")
-
-                log(f"current node : {current_stack_node.token_node.token}")
+                # for tree_stack_node in parent_stack:
+                #     log(f"stack node : {tree_stack_node.token_node.token}")
+                # for token_node in syntax_tree:
+                #     log(f"node : {token_node.token} '{token_node.token.token_string}'")
+                #
+                # log(f"current node : {current_stack_node.token_node.token}")
 
                 if self._token_queue.get().token == stack.get():
                     # 기호가 같을 때 pop
@@ -476,7 +605,8 @@ class Parser:
 
                         # 부모 스택에 현재 스택 노드를 추가한 후 첫번째 child로 이동
                         parent_stack.push(current_stack_node)
-                        current_stack_node = TreeStackNode(current_stack_node.token_node.get_child(current_stack_node.next_child()))
+                        current_stack_node = TreeStackNode(
+                            current_stack_node.token_node.get_child(current_stack_node.next_child()))
                     else:
                         # 부모로 올라가 다음 child로 이동한다.
                         while True:
@@ -538,7 +668,8 @@ class InvalidTokenError(Exception):
         result_string += f"(line {self._line_number}):{code_list[self._line_number - 1]}\n"
 
         # '^'로 표시
-        text_until_invalid_token = f"(line {self._line_number}):{code_list[self._line_number - 1]}\n".split(self._invalid_token)
+        text_until_invalid_token = f"(line {self._line_number}):{code_list[self._line_number - 1]}\n".split(
+            self._invalid_token)
         for i in range(0, len(text_until_invalid_token[0])):
             result_string += " "
         result_string += "^"
@@ -577,7 +708,8 @@ class NoSemiColonError(Exception):
         result_string += f"(line {self._token_before.line_number}):{code_list[self._token_before.line_number - 1]}\n"
 
         # '^'로 표시
-        text_until_invalid_token = f"(line {self._token_before.line_number}):{code_list[self._token_before.line_number - 1]}\n".split(self._token_before.token_string)
+        text_until_invalid_token = f"(line {self._token_before.line_number}):{code_list[self._token_before.line_number - 1]}\n".split(
+            self._token_before.token_string)
         for i in range(0, len(text_until_invalid_token[0]) + len(self._token_before.token_string)):
             result_string += " "
         result_string += "^"
@@ -586,5 +718,6 @@ class NoSemiColonError(Exception):
 
 
 compiler = Compiler()
-file_path = input()
+# file_path = input()
+file_path = "reference/sample.c"
 compiler.compile(file_path)
