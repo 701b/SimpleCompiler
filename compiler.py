@@ -182,7 +182,8 @@ class SymbolTable:
     BYTES_OF_INT = 4
     BYTES_OF_CHAR = 1
 
-    def __init__(self):
+    def __init__(self, source_code: str):
+        self._source_code = source_code
         self._symbol_table = pd.DataFrame({'identifier': [],
                                            'type': [],
                                            'block_number': [],
@@ -190,25 +191,30 @@ class SymbolTable:
                                            'address': []})
         self._next_address = 0x00000000
 
-    def add_symbol(self, identifier: str, type: str, block_number: int):
+    def add_symbol(self, token: Token, type: str, block_number: int) -> None:
         """심볼 테이블에 심볼을 추가하는 메서드
 
         Args:
-            identifier: 추가할 변수의 식별자
+            token: 추가할 변수의 토큰
             type: 추가할 변수의 타입
             block_number: 추가할 변수가 속한 블록 번호
 
         Raises:
+            RedundantVariableDeclarationError: 심볼 테이블에 이미 같은 식별자, 블록 넘버의 심볼이 있을 때 발생한다.
             RuntimeError: int, char 이외의 변수가 입력되는 경우 발생한다.
         """
+        search_result = self._symbol_table[self._symbol_table['identifier'] == token.token_string and self._symbol_table['block_number'] == block_number]
+        if len(search_result) != 0:
+            raise RedundantVariableDeclarationError(self._source_code, token)
+
         if type == 'int':
             if self._next_address % SymbolTable.BYTES_OF_INT != 0:
                 self._next_address += SymbolTable.BYTES_OF_INT - self._next_address % SymbolTable.BYTES_OF_INT
 
-            self._symbol_table.loc[len(self._symbol_table)] = [identifier, type, block_number, SymbolTable.BYTES_OF_INT, self._next_address]
+            self._symbol_table.loc[len(self._symbol_table)] = [token.token_string, type, block_number, SymbolTable.BYTES_OF_INT, self._next_address]
             self._next_address += SymbolTable.BYTES_OF_INT
         elif type == 'char':
-            self._symbol_table.loc[len(self._symbol_table)] = [identifier, type, block_number, SymbolTable.BYTES_OF_CHAR, self._next_address]
+            self._symbol_table.loc[len(self._symbol_table)] = [token.token_string, type, block_number, SymbolTable.BYTES_OF_CHAR, self._next_address]
             self._next_address += SymbolTable.BYTES_OF_CHAR
         else:
             # 이 에러가 일어나면 코딩이 잘못된 것
@@ -218,13 +224,13 @@ class SymbolTable:
         """심볼 테이블에서 변수의 주소를 검색하는 메서드
 
         Args:
-            token:
-            block_number_stack:
+            token: 검색할 토큰
+            block_number_stack: 해당 토큰이 속한 블록 스택
 
         Returns: 심볼 테이블에서 탐색한 변수의 주소
 
         Raises:
-
+            NoVariableDeclarationError: 선언되지 않은 변수를 사용할 때 발생한다.
         """
         while True:
             block_number = block_number_stack.pop()
@@ -243,7 +249,7 @@ class SymbolTable:
                     continue
                 else:
                     # 스택이 빈 경우 -> 정의된 변수가 없음
-                    raise RuntimeError("Compiler >> no variable defined")
+                    raise NoVariableDeclarationError(self._source_code, token)
 
 
 class Compiler:
@@ -594,76 +600,100 @@ class Parser:
         return syntax_tree
 
 
-class InvalidTokenError(Exception):
+class CompileError(Exception):
+
+    def __init__(self, source_code:str, error_token: Token, error_sentence = "", do_show_token = False, do_mark = False, do_mark_at_last = False):
+        """
+        Args:
+            source_code: 전체 소스코드
+            error_token:  에러가 발생한 토큰
+            error_sentence: 발생한 에러에 대한 요약 문장
+            do_show_token: 에러가 발생한 토큰 문자열을 보여줄 것인지
+            do_mark: 소스 코드 상 에러가 발생한 토큰이 위치한 곳을 보여줄 것인지
+            do_mark_at_last: 소스 코드 상 에러가 발생한 토큰이 위치한 곳의 뒷 부분을 마크할 것인지 / False이면 앞부분을 마크
+        """
+        self._source_code = source_code
+        self._error_token = error_token
+        self._error_setence = error_sentence
+        self._do_show_token = do_show_token
+        self._do_mark = do_mark
+        self._do_mark_at_last = do_mark_at_last
+
+    def __str__(self):
+        result_string = f"Compile Error >> {self._error_setence}"
+
+        if self._do_show_token:
+            result_string += f" : {self._error_token.token_string}\n"
+        else:
+            result_string += "\n"
+
+        if self._do_mark:
+            code_list = self._source_code.split("\n")
+            result_string += f"(line {self._error_token.line_number}):{code_list[self._error_token.line_number - 1]}\n"
+
+            # '^'로 표시
+            text_until_invalid_token = f"(line {self._error_token.line_number}):{code_list[self._error_token.line_number - 1]}\n".split(self._error_token.token_string)
+
+            if self._do_mark_at_last:
+                for i in range(0, len(text_until_invalid_token[0])):
+                    result_string += " "
+            else:
+                for i in range(0, len(text_until_invalid_token[0]) + len(self._error_token.token_string)):
+                    result_string += " "
+
+            result_string += "^"
+
+        return result_string
+
+
+class InvalidTokenError(CompileError):
     """어휘 분석 중 소스 코드에 알 수 없는 토큰이 있을 때 발생하는 에러
 
     에러 발생 시 해석할 수 없는 토큰을 출력하고, 소스 코드에서 문제의 토큰이 있는 줄을 출력한다.
     """
 
-    def __init__(self, source_code: str, invalid_token: str, line_number: int):
-        """
-        Args:
-            source_code: 전체 소스 코드
-            invalid_token: 인식되지 않는 토큰 문자열
-            line_number: 인식되지 않는 토큰 문자열이 있는 줄 번호
-        """
-        self._source_code = source_code
-        self._invalid_token = invalid_token
-        self._line_number = line_number
-
-    def __str__(self):
-        result_string = f"Compile Error >> 소스 코드에 알 수 없는 토큰이 있습니다 : '{self._invalid_token}'\n"
-        code_list = self._source_code.split("\n")
-        result_string += f"(line {self._line_number}):{code_list[self._line_number - 1]}\n"
-
-        # '^'로 표시
-        text_until_invalid_token = f"(line {self._line_number}):{code_list[self._line_number - 1]}\n".split(self._invalid_token)
-        for i in range(0, len(text_until_invalid_token[0])):
-            result_string += " "
-        result_string += "^"
-
-        return result_string
+    def __init__(self, source_code: str, error_token: str, line_number: int):
+        super().__init__(source_code, Token(error_token, None, line_number), "소스 코드에 인식할 수 없는 토큰이 있습니다", True, True)
 
 
-class NotMatchedBraceError(Exception):
-    """구문 분석 중 소스 코드에 중괄호가 맞지 않을 때 발생하는 에러
+class NotMatchedBraceError(CompileError):
+    """구문 분성 중 소스 코드의 중괄호가 매칭되지 않을 때 발생하는 에러
 
-    에러 발생 시 중괄호가 맞지 않음을 알린다.
+    에러 발생 시 중괄호가 매칭되지 않았다는 문구를 표시한다.
     """
 
-    def __str__(self):
-        return "Compile Error >> 소스 코드에 중괄호가 서로 매칭되지 않습니다"
+    def __init__(self):
+        super().__init__(None, None, "소스 코드에 중괄호가 서로 매칭되지 않습니다")
 
 
-class NoSemiColonError(Exception):
+class RedundantVariableDeclarationError(CompileError):
+    """기호표 작성 중 범위와 식별자가 중복된 변수 선언이 있을 때 발생하는 에러
+
+    에러 발생 시 변수가 중복되었음을 알리고, 소스 코드에서 중복된 변수 위치를 표시한다.
+    """
+
+    def __init__(self, source_code: str, error_token: Token):
+        super().__init__(source_code, error_token, "다음의 변수가 중복 선언되었습니다", True, True, True)
+
+
+class NoSemiColonError(CompileError):
     """구문 분석 중 소스 코드에서 세미 콜론이 필요한 곳에 없을 때 발생하는 에러
 
-    에러 발생 시 세미 콜론이 없음을 알리고, 소스 코드에서 필요한 부분을 표시한다.
+    에러 발생 시 세미 콜론이 없음을 알리고, 소스 코드에서 세미 콜론이 필요한 부분을 표시한다.
     """
 
-    def __init__(self, source_code: str, token_before: Token):
-        """
-        Args:
-            source_code: 전체 소스 코드
-            token_before: 세미 콜론이 있어야할 위치의 바로 앞 토큰
-        """
-        self._source_code = source_code
-        self._token_before = token_before
-
-    def __str__(self):
-        result_string = "Compile Error >> 소스 코드의 다음 위치에 ';'가 필요합니다\n"
-        code_list = self._source_code.split("\n")
-        result_string += f"(line {self._token_before.line_number}):{code_list[self._token_before.line_number - 1]}\n"
-
-        # '^'로 표시
-        text_until_invalid_token = f"(line {self._token_before.line_number}):{code_list[self._token_before.line_number - 1]}\n".split(self._token_before.token_string)
-        for i in range(0, len(text_until_invalid_token[0]) + len(self._token_before.token_string)):
-            result_string += " "
-        result_string += "^"
-
-        return result_string
+    def __init__(self, source_code: str, error_token: Token):
+        super().__init__(source_code, error_token, "소스 코드의 다음 위치에 ';'가 필요합니다", False, True, True)
 
 
+class NoVariableDeclarationError(CompileError):
+    """심볼 테이블 사용 중 선언되지 않은 변수를 사용할 때 발생하는 에러
+
+    에러 발생 시 선언되지 않은 변수가 사용되었음을 알리고, 선언되지 않은 변수가 사용된 위치를 표시한다.
+    """
+
+    def __init__(self, source_code: str, error_token: Token):
+        super().__init__(source_code, error_token, "다음 변수가 선언되지 않았습니다", True, True, True)
 
 
 compiler = Compiler()
