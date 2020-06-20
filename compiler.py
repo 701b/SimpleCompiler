@@ -285,14 +285,14 @@ class Compiler:
         except InvalidTokenError as e:
             print(e)
             return
+        except NotMatchedBraceError as e:
+            print(e)
+            return
 
         parser = Parser(scanner.get_token_queue(), source_code)
 
         try:
             syntax_tree = parser.parse()
-        except NotMatchedBraceError as e:
-            print(e)
-            return
         except NoSemiColonError as e:
             print(e)
             return
@@ -343,6 +343,7 @@ class Scanner:
         Raises:
             FileNotFoundError: 인자로 받은 file_path로부터 파일을 읽지 못한 경우 발생한다.
             InvalidCodeError: 소스 코드에 알 수 없는 기호가 있을 때 발생한다.
+            NotMatchedBraceError: 왼쪽과 오른쪽 중괄호 개수가 일치하지 않을 때 발생한다.
         """
 
         # 소스 코드로부터 토큰을 추출한다.
@@ -381,6 +382,19 @@ class Scanner:
                     invalid_token = pattern.match(source_code_temp)
 
                     raise InvalidTokenError(self._source_code, invalid_token.group(), line_number)
+
+        # 왼쪽과 오른쪽 중괄호의 개수가 일치한지 확인한다.
+        left_brace_count = 0
+        right_brace_count = 0
+
+        for token in self._tokens:
+            if token.token == "{":
+                left_brace_count += 1
+            elif token.token == "}":
+                right_brace_count += 1
+
+        if left_brace_count != right_brace_count:
+            raise NotMatchedBraceError()
 
         log(f"토큰 목록::\n{self._tokens}\n")
 
@@ -486,7 +500,6 @@ class Parser:
         LL parser의 원리를 사용한다.
 
         Raises:
-            NotMatchedBraceError: 구문 분석 중 중괄호가 맞지 않을 때 발생한다.
             NoSemiColonError: 세미 콜론이 있어야할 위치에 없을 때 발생한다. 
         """
         # syntax tree
@@ -588,14 +601,11 @@ class Parser:
             for token in self._token_queue:
                 pass
 
-            # 가장 먼저 발견되는 symbol을 기준으로 에러를 판단한다.
-            for symbol in stack:
-                if symbol == '}':
-                    # stack에 오른쪽 중괄호가 남을 때
-                    raise NotMatchedBraceError
-                if symbol == ';':
-                    # stack에 세미 콜론이 남을 때
-                    raise NoSemiColonError(self._source_code, used_token_stack.get())
+            # stack에 남은 다음 token이 세미 콜론이면 세미 콜론이 있어야할 곳에 없는 것으로 판정한다.
+            if stack.get() == ';':
+                raise NoSemiColonError(self._source_code, used_token_stack.get())
+
+            print(f"Compile Error >> 정의되지 않은 에러 발생!")
 
         return syntax_tree
 
@@ -635,10 +645,10 @@ class CompileError(Exception):
             text_until_invalid_token = f"(line {self._error_token.line_number}):{code_list[self._error_token.line_number - 1]}\n".split(self._error_token.token_string)
 
             if self._do_mark_at_last:
-                for i in range(0, len(text_until_invalid_token[0])):
+                for i in range(0, len(text_until_invalid_token[0]) + len(self._error_token.token_string)):
                     result_string += " "
             else:
-                for i in range(0, len(text_until_invalid_token[0]) + len(self._error_token.token_string)):
+                for i in range(0, len(text_until_invalid_token[0])):
                     result_string += " "
 
             result_string += "^"
@@ -652,18 +662,18 @@ class InvalidTokenError(CompileError):
     에러 발생 시 해석할 수 없는 토큰을 출력하고, 소스 코드에서 문제의 토큰이 있는 줄을 출력한다.
     """
 
-    def __init__(self, source_code: str, error_token: str, line_number: int):
-        super().__init__(source_code, Token(error_token, None, line_number), "소스 코드에 인식할 수 없는 토큰이 있습니다", True, True)
+    def __init__(self, source_code: str, error_token_str: str, line_number: int):
+        super().__init__(source_code, Token(None, error_token_str, line_number), "소스 코드에 인식할 수 없는 토큰이 있습니다", True, True)
 
 
 class NotMatchedBraceError(CompileError):
-    """구문 분성 중 소스 코드의 중괄호가 매칭되지 않을 때 발생하는 에러
+    """어휘 분석 중 소스 코드에서 왼쪽과 오른쪽 중괄호의 개수가 일치하지 않을 때 발생하는 에러
 
-    에러 발생 시 중괄호가 매칭되지 않았다는 문구를 표시한다.
+    에러 발생 시 왼쪽과 오른쪽 중괄호의 개수가 일치하지 않는다고 알린다.
     """
 
     def __init__(self):
-        super().__init__(None, None, "소스 코드에 중괄호가 서로 매칭되지 않습니다")
+        super().__init__(None, None, "소스 코드에서 왼쪽과 오른쪽 중괄호의 개수가 일치하지 않습니다.")
 
 
 class RedundantVariableDeclarationError(CompileError):
@@ -673,7 +683,7 @@ class RedundantVariableDeclarationError(CompileError):
     """
 
     def __init__(self, source_code: str, error_token: Token):
-        super().__init__(source_code, error_token, "다음의 변수가 중복 선언되었습니다", True, True, True)
+        super().__init__(source_code, error_token, "다음의 변수가 중복 선언되었습니다", True, True)
 
 
 class NoSemiColonError(CompileError):
@@ -693,7 +703,7 @@ class NoVariableDeclarationError(CompileError):
     """
 
     def __init__(self, source_code: str, error_token: Token):
-        super().__init__(source_code, error_token, "다음 변수가 선언되지 않았습니다", True, True, True)
+        super().__init__(source_code, error_token, "다음 변수가 선언되지 않았습니다", True, True)
 
 
 compiler = Compiler()
