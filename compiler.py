@@ -740,52 +740,52 @@ class CodeGenerator:
 
     TARGET_FILE_NAME = "targetCode.txt"
 
-    def __init__(self, code_table: list):
-        """
-        Args:
-            code_table: op, arg1, arg2, result 순서로 저장된 코드 테이블
-        """
-        self._code_table = code_table
+    def __init__(self):
+        pass
 
     def generate_code(self) -> None:
+        pass
+
+    def generate_target_code(self) -> None:
         """코드 테이블의 내용을 파일에 작성한다.
 
         Raises:
             RuntimeError: 코드 테이블에 정의되지 않은 instruction이 있는 경우 발생한다.
         """
+        code_table = []
         file_writer = FileWriter(CodeGenerator.TARGET_FILE_NAME)
 
-        for intermediate_code in self._code_table:
+        for intermediate_code in code_table:
             if intermediate_code[0] == "LD":
                 # LD result, arg1 : arg1 주소에 있는 데이터를 result 레지스터에 저장한다.
-                file_writer.write(f"{self._code_table[0]} {self._code_table[3]}, {self._code_table[1]}")
+                file_writer.write(f"{intermediate_code[0]} {intermediate_code[3]}, {intermediate_code[1]}")
             elif intermediate_code[0] == "ST":
                 # ST arg1, arg2 : arg1 레지스터에 있는 데이터를 arg2 주소의 메모리에 저장한다.
-                file_writer.write(f"{self._code_table[0]} {self._code_table[1]}, {self._code_table[2]}")
+                file_writer.write(f"{intermediate_code[0]} {intermediate_code[1]}, {intermediate_code[2]}")
             elif intermediate_code[0] == "LDB":
                 # LDB result, arg1 : arg1 주소에 있는 byte단위 데이터를 result 레지스터에 저장한다.
-                file_writer.write(f"{self._code_table[0]} {self._code_table[3]}, {self._code_table[1]}")
+                file_writer.write(f"{intermediate_code[0]} {intermediate_code[3]}, {intermediate_code[1]}")
             elif intermediate_code[0] == "STB":
                 # STB arg1, arg2 : arg1 레지스터에 있는 데이터를 arg2 주소의 메모리에 저장한다.
-                file_writer.write(f"{self._code_table[0]} {self._code_table[1]}, {self._code_table[2]}")
+                file_writer.write(f"{intermediate_code[0]} {intermediate_code[1]}, {intermediate_code[2]}")
             elif intermediate_code[0] == "ADD":
                 # ADD result, arg1, arg2 : result = arg1 + arg2
-                file_writer.write(f"{self._code_table[0]} {self._code_table[3]}, {self._code_table[1]}, {self._code_table[2]}")
+                file_writer.write(f"{intermediate_code[0]} {intermediate_code[3]}, {intermediate_code[1]}, {intermediate_code[2]}")
             elif intermediate_code[0] == "MUL":
                 # MUL result, arg1, arg2 : result = arg1 * arg2
-                file_writer.write(f"{self._code_table[0]} {self._code_table[3]}, {self._code_table[1]}, {self._code_table[2]}")
+                file_writer.write(f"{intermediate_code[0]} {intermediate_code[3]}, {intermediate_code[1]}, {intermediate_code[2]}")
             elif intermediate_code[0] == "LT":
                 # LT result, arg1, arg2 : if (arg1 < arg2) result = 1 else result = 0
-                file_writer.write(f"{self._code_table[0]} {self._code_table[3]}, {self._code_table[1]}, {self._code_table[2]}")
+                file_writer.write(f"{intermediate_code[0]} {intermediate_code[3]}, {intermediate_code[1]}, {intermediate_code[2]}")
             elif intermediate_code[0] == "JUMPF":
                 # JUMPF arg1   arg2 : if (arg1 == 0) Jump to arg2
-                file_writer.write(f"{self._code_table[0]} {self._code_table[1]}   {self._code_table[2]}")
+                file_writer.write(f"{intermediate_code[0]} {intermediate_code[1]}   {intermediate_code[2]}")
             elif intermediate_code[0] == "JUMPT":
                 # JUMPT arg1   arg2 : if (arg1 != 0) Jump to arg2
-                file_writer.write(f"{self._code_table[0]} {self._code_table[1]}   {self._code_table[2]}")
+                file_writer.write(f"{intermediate_code[0]} {intermediate_code[1]}   {intermediate_code[2]}")
             elif intermediate_code[0] == "JUMP":
                 # JUMPT    arg1 : Jump to arg1
-                file_writer.write(f"{self._code_table[0]}    {self._code_table[1]}")
+                file_writer.write(f"{intermediate_code[0]}    {intermediate_code[1]}")
             else:
                 # 정의되지 않은 instruction으로 코딩이 잘못된 경우임.
                 raise RuntimeError("정의되지 않은 instruction 사용!")
