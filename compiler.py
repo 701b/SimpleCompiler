@@ -5,6 +5,7 @@ Team Name : 떡볶이 국물이 옷에 팀
 Student Name : 문태의, 성아영
 """
 
+import warnings
 import re
 import pandas as pd
 from filemanager import FileReader, FileWriter
@@ -528,7 +529,7 @@ def Syntax_tree_Optimization(syntax_tree):
         if token.token.token == "}":
             Code.append(token)
             block_num -= 1
-            while TreeStack.get() is not "block":
+            while TreeStack.get() != "block":
                 if TreeStack.get() == "total":
                     break
                 TreeStack.pop()
@@ -672,7 +673,7 @@ def Generate_code(Code):
 
             block_num = blockStack.pop()
             if current_state == 'block' and not whileStack.is_empty():
-                result_Code.append(f"END_WHILE <{block_num } : {While_num}>")
+                result_Code.append(f"END_WHILE <{block_num } : {While_num}> :")
                 While_num -= 1
                 whileStack.pop()
 
@@ -728,7 +729,7 @@ def Generate_code(Code):
                     num[0] = num2
                     del op[0]
                 del num[0]
-                result_Code.append(In.JUMP(f"WHILE <{block_num} : {While_num}> : "))
+                result_Code.append(In.JUMP(f"WHILE <{block_num} : {While_num}>"))
 
 #if로 시작할 경우"
         if current_state == "IF":
@@ -829,7 +830,7 @@ def Generate_code(Code):
                 del num[0]
 
 
-    file_writer = FileWriter(file_path.split("/")[0] + "/Code.txt")
+    file_writer = FileWriter(file_path.split("/")[0] + "/targetCode.code")
     for i in result_Code:
         file_writer.write(i)
         file_writer.write("\n")
@@ -1205,7 +1206,7 @@ class NoSemiColonError(CompileError):
     """
 
     def __init__(self, source_code: str, error_token: Token):
-        super().__init__(source_code, error_token, "소스 코드의 다음 줄에 ';'가 필요합니다", True, True, True, True)
+        super().__init__(source_code, error_token, "소스 코드의 다음 위치에 ';'가 필요합니다", True, False, True, True)
 
 
 class NoVariableDeclarationError(CompileError):
@@ -1245,6 +1246,7 @@ class NotDefinedCompileError(CompileError):
         super().__init__(None, None, "구문 분석 중 에러가 발생하였으나, 원인을 알 수 없습니다")
 
 
+warnings.filterwarnings("ignore")
 compiler = Compiler()
 file_path = input("file path : ")
 compiler.compile(file_path)
