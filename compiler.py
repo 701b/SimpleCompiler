@@ -454,87 +454,386 @@ class Scanner:
         return self._source_code
 
 
+class Instruction:
+
+    # Load num into R1
+    def LD(self, R1, num):
+        return f"LD  {R1}  {num}"
+
+    # Store value of R1 into var
+    def ST(self, R1, var):
+        return f"ST  {R1}  {var}"
+
+    # R1 = R2 + R3
+    def ADD(self, R1, R2, R3):
+        return f"ADD  {R1}  {R2}  {R3}"
+
+    # R1 = R2 * R3
+    def MUL(self, R1, R2, R3):
+        return f"MUL  {R1}  {R2}  {R3}"
+
+    # if R2 < R3 : 1, else : 0
+    def LT(self, R1, R2, R3):
+        return f"LT  {R1}  {R2}  {R3}"
+
+    # jump to label if R1 is 0
+    def JUMPF(self, R1, label):
+        return f"JUMPF  {R1}  {label}"
+
+    # jump to label if R1 is not 0
+    def JUMPT(self, R1, label):
+        return f"JUMPT  {R1}  {label}"
+
+    # jump to label without condition
+    def JUMP(self, label):
+        return f"JUMP  {label}"
+
+    def IsEqual(self, R1, R2):
+        Code = []
+        Code.append(self.MUL(R2, R2, "Nega"))
+        Code.append(self.ADD(R1, R1, R2))
+        Code.append(self.LT(R1, "Zero", R2))
+
+        return Code
+
+
+    def Operater(self, R1, R2, op):
+        if op == "+":
+            return (self.ADD(R2, R2, R1))
+        if op == "*":
+            return (self.MUL(R2, R2, R1))
+        if op == "==":
+            return (self.IsEqual(R2, R1))
+        if op == ">":
+            return (self.LT(R2, R2, R1))
+        if op == "=":
+            return (self.ST(R2, R1))
+
 
 def Syntax_tree_Optimization(syntax_tree):
     Code = []
 
     TreeStack = Stack()
+    block_num = 0
 
     for token in syntax_tree:
-        if token.token.token == "stat":
+        if token.token.token == "total":
             TreeStack.push(token.token.token)
+
+        if token.token.token == "block" and TreeStack.get() == "total":
+            block_num += 1
+            TreeStack.push(token.token.token)
+            Code.append(token)
+
+        if token.token.token == "}":
+            Code.append(token)
+            block_num -= 1
+            while TreeStack.get() is not "block":
+                if TreeStack.get() == "total":
+                    break
+                TreeStack.pop()
+            TreeStack.pop()
+
+            if not TreeStack.is_empty() and TreeStack.get() == "WHILE":
+                TreeStack.pop()
+            if not TreeStack.is_empty() and TreeStack.get() == "ELSE":
+                TreeStack.pop()
+                TreeStack.pop()
+                TreeStack.pop()
 
         if TreeStack.is_empty():
             continue
         elif TreeStack.get() == "stat":
             if token.token.token == "WHILE" or token.token.token == "IF" or token.token.token == "RETURN":
-                Code.append(token.token.token)
+                Code.append(token)
                 TreeStack.push(token.token.token)
             if token.token.token == "word":
-                Code.append(token.token.token_string)
+                Code.append(token)
                 TreeStack.push(token.token.token)
 
         elif TreeStack.get() == "WHILE":
             if token.token.token == "cond":
-                Code.append(token.token.token)
+                Code.append(token)
                 TreeStack.push(token.token.token)
 
 
         elif TreeStack.get() == "cond":
             if token.token.token != "block" and token.token.token != "THEN":
                 if token.token.token_string is not None:
-                    Code.append(token.token.token_string)
+                    Code.append(token)
             if token.token.token == "block":
                 TreeStack.pop()
-                Code.append(token.token.token)
+                block_num += 1
+                Code.append(token)
                 TreeStack.push(token.token.token)
             if token.token.token == "THEN":
                 TreeStack.pop()
-                Code.append(token.token.token)
+                Code.append(token)
                 TreeStack.push(token.token.token)
 
+
+
         elif TreeStack.get() == "block":
-            if token.token.token == "}":
-                TreeStack.pop()
+            if token.token.token == "stat":
+                TreeStack.push(token.token.token)
 
         elif TreeStack.get() == "IF":
             if token.token.token == "cond":
-                Code.append(token.token.token)
+                Code.append(token)
                 TreeStack.push(token.token.token)
 
-            if token.token.token == "ELSE":
-                Code.append(token.token.token)
+
+        elif TreeStack.get() == "IF":
+            if token.token.token == "cond":
+                Code.append(token)
                 TreeStack.push(token.token.token)
+
 
         elif TreeStack.get() == "THEN":
             if token.token.token == "block":
-                TreeStack.pop()
-                Code.append(token.token.token)
+                block_num += 1
+                Code.append(token)
+                TreeStack.push(token.token.token)
+            if token.token.token == "ELSE":
+                Code.append(token)
                 TreeStack.push(token.token.token)
 
         elif TreeStack.get() == "ELSE":
             if token.token.token == "block":
-                TreeStack.pop()
-                Code.append(token.token.token)
+                block_num += 1
+                Code.append(token)
                 TreeStack.push(token.token.token)
 
         elif TreeStack.get() == 'word':
             if token.token.token == ";":
+                Code.append(token)
                 TreeStack.pop()
                 continue
             if token.token.token_string is not None:
-                Code.append(token.token.token_string)
+                Code.append(token)
 
         elif TreeStack.get() == "RETURN":
             if token.token.token == ";":
+                Code.append(token)
                 TreeStack.pop()
+                if TreeStack.get() == "stat":
+                    TreeStack.pop()
                 continue
             if token.token.token_string is not None:
-                Code.append(token.token.token_string)
-    show_code(Code)
+                Code.append(token)
+    Generate_code(Code)
 
-def show_code(Code):
-    log(f"code : {Code}")
+
+def Generate_code(Code):
+    In = Instruction()
+    result_Code = []
+    operater = ["*", "+", "==", ">", "="]
+    # While block의 중첩을 구분하기 위함.
+    whileStack = Stack()
+    # block # 구분하기 위함.
+    blockStack = Stack()
+
+    #연산자와 피연산자를 저장하기 위함
+    num = []
+    op = []
+
+    #현재 어느 Tree속에 들어와있는지 구분(WHILE, IF, THEN, ELSE, RETURN, block)
+    current_state = ""
+    #WHILE LABEL에 숫자를 붙이기 위함
+    While_num = 0
+    #IF LABEL에 숫자를 붙이기 위함
+    if_num = 0
+    #LABEL <block_num : while/if_num>
+    block_num = 0
+    register_num = 0
+
+
+    for token in Code:
+
+        num1 = 0
+        num2 = 0
+
+        if token.token.token == "WHILE":
+            While_num += 1
+            current_state = "WHILE"
+            whileStack.push(token.token.token)
+            result_Code.append(f"WHILE <{block_num+ 1 } : {While_num}> : ")
+        elif token.token.token == "IF":
+            current_state = "IF"
+            if_num += 1
+            result_Code.append(f"IF <{block_num} : {if_num}> : ")
+        elif token.token.token == "RETURN":
+            current_state = "RETURN"
+
+        if token.token.token == "block":
+            block_num += 1
+            blockStack.push(block_num)
+        elif token.token.token == "}":
+
+            block_num = blockStack.pop()
+            if current_state == 'block' and not whileStack.is_empty():
+                result_Code.append(f"END_WHILE <{block_num } : {While_num}>")
+                While_num -= 1
+                whileStack.pop()
+
+
+#WHILE로 시작할 경우
+        if current_state == "WHILE":
+            #연산자, 피연산자 저장
+            if token.token.token == "num" or token.token.token == "word":
+                result_Code.append(In.LD("R" + str(register_num), token.token.token_string))
+                num.append("R" + str(register_num))
+                register_num += 1
+            if token.token.token in operater:
+                op.append(token.token.token)
+            # 조건 부분이 끝나면 연산 시작
+            if token.token.token == "block":
+                current_state = "block"
+                op.reverse()
+                num.reverse()
+                # 피연산자와 연산자 LIST의 길이를 보고 연산을 반복한다.
+                while len(num) - 1 != 0 and len(op) != 0:
+                    num1 = num[0]
+                    num2 = num[1]
+                    if op[0] == "==":
+                        result_Code.extend(In.Operater(num1, num2, op[0]))
+                    else:
+                        result_Code.append(In.Operater(num1, num2, op[0]))
+                    del num[0]
+                    num[0] = num2
+                    del op[0]
+                result_Code.append(In.JUMPF(num[0], f"END_WHILE <{block_num} : {While_num}>"))
+                # 한 block, cond에 관해 연산이 끝나면 num list와 op list는 모두 비운 뒤 다른 연산에 들어간다.
+                del num[0]
+
+
+        if current_state == "block":
+            if token.token.token == "num" or token.token.token == "word":
+                result_Code.append(In.LD("R" + str(register_num), token.token.token_string))
+                num.append("R" + str(register_num))
+                register_num += 1
+            if token.token.token in operater:
+                op.append(token.token.token)
+            if token.token.token == ";":
+                op.reverse()
+                num.reverse()
+                while len(num) - 1 != 0 and len(op) != 0:
+                    num1 = num[0]
+                    num2 = num[1]
+                    if op[0] == "==":
+                        result_Code.extend(In.Operater(num1, num2, op[0]))
+                    else:
+                        result_Code.append(In.Operater(num1, num2, op[0]))
+                    del num[0]
+                    num[0] = num2
+                    del op[0]
+                del num[0]
+                result_Code.append(In.JUMP(f"WHILE <{block_num} : {While_num}> : "))
+
+#if로 시작할 경우"
+        if current_state == "IF":
+            if token.token.token == "num" or token.token.token == "word":
+                result_Code.append(In.LD("R" + str(register_num), token.token.token_string))
+                num.append("R" + str(register_num))
+                register_num += 1
+            if token.token.token in operater:
+                op.append(token.token.token)
+            if token.token.token == "THEN":
+                current_state = "THEN"
+                op.reverse()
+                num.reverse()
+                while len(num) - 1 != 0 and len(op) != 0:
+                    num1 = num[0]
+                    num2 = num[1]
+                    if op[0] == "==":
+                        result_Code.extend(In.Operater(num1, num2, op[0]))
+                    else:
+                        result_Code.append(In.Operater(num1, num2, op[0]))
+                    del num[0]
+                    num[0] = num2
+                    del op[0]
+                result_Code.append(In.JUMPF(num[0], f"ELSE <{block_num} : {if_num}> : "))
+                del num[0]
+
+        if current_state == "THEN":
+            if token.token.token == "num" or token.token.token == "word":
+                result_Code.append(In.LD("R" + str(register_num), token.token.token_string))
+                num.append("R" + str(register_num))
+                register_num += 1
+            if token.token.token in operater:
+                op.append(token.token.token)
+            if token.token.token == "ELSE":
+                current_state = "ELSE"
+                op.reverse()
+                num.reverse()
+                while len(num) - 1 != 0 and len(op) != 0:
+                    num1 = num[0]
+                    num2 = num[1]
+                    if op[0] == "==":
+                        result_Code.extend(In.Operater(num1, num2, op[0]))
+                    else:
+                        result_Code.append(In.Operater(num1, num2, op[0]))
+                    del num[0]
+                    num[0] = num2
+                    del op[0]
+                result_Code.append(f"ELSE <{block_num} : {if_num}> : ")
+                del num[0]
+
+        if current_state == "ELSE":
+            if token.token.token == "num" or token.token.token == "word":
+                result_Code.append(In.LD("R" + str(register_num), token.token.token_string))
+                num.append("R" + str(register_num))
+                register_num += 1
+            if token.token.token in operater:
+                op.append(token.token.token)
+            if token.token.token == "}":
+                op.reverse()
+                num.reverse()
+                while len(num) - 1 != 0 and len(op) != 0:
+                    num1 = num[0]
+                    num2 = num[1]
+                    if op[0] == "==":
+                        result_Code.extend(In.Operater(num1, num2, op[0]))
+                    else:
+                        result_Code.append(In.Operater(num1, num2, op[0]))
+                    del num[0]
+                    num[0] = num2
+                    del op[0]
+                del num[0]
+                result_Code.append(f"ENDIF <{block_num} : {if_num}> : ")
+
+
+#RETURN으로 시작할 경우
+        if current_state == "RETURN":
+            if token.token.token == "num" or token.token.token == "word":
+                result_Code.append(In.LD("R" + str(register_num), token.token.token_string))
+                num.append("R" + str(register_num))
+                register_num += 1
+            if token.token.token in operater:
+                op.append(token.token.token)
+            if token.token.token == ";":
+                current_state = "block"
+                op.reverse()
+                num.reverse()
+                while len(num) - 1 != 0 and len(op) != 0:
+                    num1 = num[0]
+                    num2 = num[1]
+                    if op[0] == "==":
+                        result_Code.extend(In.Operater(num1, num2, op[0]))
+                    else:
+                        result_Code.append(In.Operater(num1, num2, op[0]))
+                    del num[0]
+                    num[0] = num2
+                    del op[0]
+                result_Code.append(In.ADD("RV", "ZERO", num[0]))
+                del num[0]
+
+
+    file_writer = FileWriter(file_path.split("/")[0] + "/Code.txt")
+    for i in result_Code:
+        file_writer.write(i)
+        file_writer.write("\n")
+        print(i)
 
 
 
