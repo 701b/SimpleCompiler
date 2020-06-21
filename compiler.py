@@ -193,7 +193,8 @@ class SymbolTable:
                                            'type': [],
                                            'block_number': [],
                                            'size': [],
-                                           'address': []})
+                                           'address': [],
+                                           'valid': []})
         self._next_address = 0x00000000
 
     def add_symbol(self, token: Token, type: str) -> None:
@@ -205,7 +206,7 @@ class SymbolTable:
 
         Raises:
             RedundantVariableDeclarationError: 심볼 테이블에 이미 같은 식별자, 블록 넘버의 심볼이 있을 때 발생한다.
-            RuntimeError: int, char 이외의 변수가 입력되는 경우 발생한다.
+            RuntimeError: 컴파일러 코딩이 잘못된 경우 발생한다.
         """
         search_result = self._symbol_table[(self._symbol_table['identifier'] == token.token_string) & (self._symbol_table['block_number'] == token.block_number)]
         if len(search_result) != 0:
@@ -215,14 +216,25 @@ class SymbolTable:
             if self._next_address % SymbolTable.BYTES_OF_INT != 0:
                 self._next_address += SymbolTable.BYTES_OF_INT - self._next_address % SymbolTable.BYTES_OF_INT
 
-            self._symbol_table.loc[len(self._symbol_table)] = [token.token_string, type, token.block_number, SymbolTable.BYTES_OF_INT, self._next_address]
+            self._symbol_table.loc[len(self._symbol_table)] = [token.token_string, type, token.block_number, SymbolTable.BYTES_OF_INT, self._next_address, False]
             self._next_address += SymbolTable.BYTES_OF_INT
         elif type == 'char':
-            self._symbol_table.loc[len(self._symbol_table)] = [token.token_string, type, token.block_number, SymbolTable.BYTES_OF_CHAR, self._next_address]
+            self._symbol_table.loc[len(self._symbol_table)] = [token.token_string, type, token.block_number, SymbolTable.BYTES_OF_CHAR, self._next_address, False]
             self._next_address += SymbolTable.BYTES_OF_CHAR
         else:
-            # 이 에러가 일어나면 코딩이 잘못된 것
-            raise RuntimeError("Compiler >> Invalid type!")
+            # int, char 이외의 데이터 타입이 입력되는 경우 발생한다.
+            raise RuntimeError("int, char 이외의 데이터 타입 사용됨")
+
+    def is_valid(self, address: int) -> bool:
+        search_result = self._symbol_table[self._symbol_table['address'] == address]
+
+        if len(search_result) != 0:
+            return search_result[0][5]
+        else:
+            raise RuntimeError("할당되지 않은 주소 사용됨")
+
+    def make_valid(self, address: int):
+        self._symbol_table.set_value(self._symbol_table[self._symbol_table['address'] == address], 'valid', True)
 
     def search_address_of(self, token: Token, block_number_stack: Stack) -> int:
         """심볼 테이블에서 변수의 주소를 검색하는 메서드
@@ -886,11 +898,21 @@ class NoSemiColonError(CompileError):
 class NoVariableDeclarationError(CompileError):
     """심볼 테이블 사용 중 선언되지 않은 변수를 사용할 때 발생하는 에러
 
-    에러 발생 시 선언되지 않은 변수가 사용되었음을 알리고, 선언되지 않은 변수가 사용된 위치를 표시한다.
+    에러 발생 시 선언되지 않은 변수가 사용되었음을 알리고, 해당 변수가 사용된 위치를 표시한다.
     """
 
     def __init__(self, source_code: str, error_token: Token):
         super().__init__(source_code, error_token, "다음 변수가 선언되지 않았습니다", True, True)
+
+
+class AccessingUninitializedVariableError(CompileError):
+    """코드 생성 중 값이 초기화되지 않은 변수에 접근할 때 발생하는 에러
+
+    에러 발생 시 값이 초기화되지 않은 변수에 접근했음을 알리고, 해당 변수가 사용된 위치를 표시한다.
+    """
+
+    def __init__(self, source_code: str, error_token: Token):
+        super().__init__(source_code, error_token, "초기화되지 않은 변수에 접근했습니다", True, True)
 
 
 class NotDefinedCompileError(CompileError):
