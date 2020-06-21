@@ -603,6 +603,8 @@ class Parser:
         Raises:
             NoSemiColonError: 세미 콜론이 있어야할 위치에 없을 때 발생한다.
             NotDefinedCompileError: 에러를 파악할 수 없을 때 발생한다.
+            RedundantVariableDeclarationError: 심볼 테이블에 이미 같은 식별자, 블록 넘버의 심볼이 있을 때 발생한다.
+            RuntimeError: 심볼 테이블에 int, char 이외의 변수가 입력되는 경우 발생한다.
         """
         # Symbol Table
         symbol_table = SymbolTable(self._source_code)
@@ -758,34 +760,37 @@ class CodeGenerator:
         for intermediate_code in code_table:
             if intermediate_code[0] == "LD":
                 # LD result, arg1 : arg1 주소에 있는 데이터를 result 레지스터에 저장한다.
-                file_writer.write(f"{intermediate_code[0]} {intermediate_code[3]}, {intermediate_code[1]}")
+                file_writer.write(f"\t{intermediate_code[0]} {intermediate_code[3]}, {intermediate_code[1]}")
             elif intermediate_code[0] == "ST":
                 # ST arg1, arg2 : arg1 레지스터에 있는 데이터를 arg2 주소의 메모리에 저장한다.
-                file_writer.write(f"{intermediate_code[0]} {intermediate_code[1]}, {intermediate_code[2]}")
+                file_writer.write(f"\t{intermediate_code[0]} {intermediate_code[1]}, {intermediate_code[2]}")
             elif intermediate_code[0] == "LDB":
                 # LDB result, arg1 : arg1 주소에 있는 byte단위 데이터를 result 레지스터에 저장한다.
-                file_writer.write(f"{intermediate_code[0]} {intermediate_code[3]}, {intermediate_code[1]}")
+                file_writer.write(f"\t{intermediate_code[0]} {intermediate_code[3]}, {intermediate_code[1]}")
             elif intermediate_code[0] == "STB":
                 # STB arg1, arg2 : arg1 레지스터에 있는 데이터를 arg2 주소의 메모리에 저장한다.
-                file_writer.write(f"{intermediate_code[0]} {intermediate_code[1]}, {intermediate_code[2]}")
+                file_writer.write(f"\t{intermediate_code[0]} {intermediate_code[1]}, {intermediate_code[2]}")
             elif intermediate_code[0] == "ADD":
                 # ADD result, arg1, arg2 : result = arg1 + arg2
-                file_writer.write(f"{intermediate_code[0]} {intermediate_code[3]}, {intermediate_code[1]}, {intermediate_code[2]}")
+                file_writer.write(f"\t{intermediate_code[0]} {intermediate_code[3]}, {intermediate_code[1]}, {intermediate_code[2]}")
             elif intermediate_code[0] == "MUL":
                 # MUL result, arg1, arg2 : result = arg1 * arg2
-                file_writer.write(f"{intermediate_code[0]} {intermediate_code[3]}, {intermediate_code[1]}, {intermediate_code[2]}")
+                file_writer.write(f"\t{intermediate_code[0]} {intermediate_code[3]}, {intermediate_code[1]}, {intermediate_code[2]}")
             elif intermediate_code[0] == "LT":
                 # LT result, arg1, arg2 : if (arg1 < arg2) result = 1 else result = 0
-                file_writer.write(f"{intermediate_code[0]} {intermediate_code[3]}, {intermediate_code[1]}, {intermediate_code[2]}")
+                file_writer.write(f"\t{intermediate_code[0]} {intermediate_code[3]}, {intermediate_code[1]}, {intermediate_code[2]}")
             elif intermediate_code[0] == "JUMPF":
                 # JUMPF arg1   arg2 : if (arg1 == 0) Jump to arg2
-                file_writer.write(f"{intermediate_code[0]} {intermediate_code[1]}   {intermediate_code[2]}")
+                file_writer.write(f"\t{intermediate_code[0]} {intermediate_code[1]}   {intermediate_code[2]}")
             elif intermediate_code[0] == "JUMPT":
                 # JUMPT arg1   arg2 : if (arg1 != 0) Jump to arg2
-                file_writer.write(f"{intermediate_code[0]} {intermediate_code[1]}   {intermediate_code[2]}")
+                file_writer.write(f"\t{intermediate_code[0]} {intermediate_code[1]}   {intermediate_code[2]}")
             elif intermediate_code[0] == "JUMP":
                 # JUMPT    arg1 : Jump to arg1
-                file_writer.write(f"{intermediate_code[0]}    {intermediate_code[1]}")
+                file_writer.write(f"\t{intermediate_code[0]}    {intermediate_code[1]}")
+            elif intermediate_code[0] == "LABEL":
+                # label:
+                file_writer.write(f"{intermediate_code[1]}:")
             else:
                 # 정의되지 않은 instruction으로 코딩이 잘못된 경우임.
                 raise RuntimeError("정의되지 않은 instruction 사용!")
