@@ -225,6 +225,14 @@ class SymbolTable:
             # int, char 이외의 데이터 타입이 입력되는 경우 발생한다.
             raise RuntimeError("int, char 이외의 데이터 타입 사용됨")
 
+    def get_size(self, address: int) -> int:
+        search_result = self._symbol_table[self._symbol_table['address'] == address]
+
+        if len(search_result) != 0:
+            return search_result[0][3]
+        else:
+            raise RuntimeError("할당되지 않은 주소 사용됨")
+
     def is_valid(self, address: int) -> bool:
         search_result = self._symbol_table[self._symbol_table['address'] == address]
 
