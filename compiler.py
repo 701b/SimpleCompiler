@@ -7,7 +7,7 @@ Student Name : 문태의, 성아영
 
 import re
 import pandas as pd
-from filemanager import FileReader
+from filemanager import FileReader, FileWriter
 from datastructure import Stack, Queue
 
 TAG = "Compiler"
@@ -431,50 +431,6 @@ class Scanner:
         return self._source_code
 
 
-class Instruction:
-
-    # Load num into R1
-    def LD(self, R1, num):
-        return f"LD\t{R1}  {num}"
-
-    # Store value of R1 into var
-    def ST(self, R1, var):
-        return f"ST\t{R1}  {var}"
-
-    # R1 = R2 + R3
-    def ADD(self, R1, R2, R3):
-        return f"ADD\t{R1}  {R2}  {R3}"
-
-    # R1 = R2 * R3
-    def MUL(self, R1, R2, R3):
-        return f"MUL\t{R1}  {R2}  {R3}"
-
-    # if R2 < R3 : 1, else : 0
-    def LT(self, R1, R2, R3):
-        return f"LT\t{R1}  {R2}  {R3}"
-
-    # jump to label if R1 is 0
-    def JUMPF(self, R1, label):
-        return f"JUMPF\t{R1}  {label}"
-
-    # jump to label if R1 is not 0
-    def JUMPT(self, R1, label):
-        return f"JUMPT\t{R1}  {label}"
-
-    # jump to label without condition
-    def JUMP(self, label):
-        return f"JUMP\t{label}"
-
-    def IsEqual(self, R1, R2, label):
-        Code = []
-        Nega = -1
-        Code.append(Instruction.MUL(R2, R2, Nega))
-        Code.append(Instruction.ADD(R1, R1, R2))
-        Code.append(Instruction.JUMPF(R1, label))
-
-        return Code
-
-
 
 def Syntax_tree_Optimization(syntax_tree):
     Code = []
@@ -502,7 +458,7 @@ def Syntax_tree_Optimization(syntax_tree):
 
 
         elif TreeStack.get() == "cond":
-            if token.token.token is not "block" and token.token.token is not "THEN":
+            if token.token.token != "block" and token.token.token != "THEN":
                 if token.token.token_string is not None:
                     Code.append(token.token.token_string)
             if token.token.token == "block":
@@ -552,9 +508,9 @@ def Syntax_tree_Optimization(syntax_tree):
                 continue
             if token.token.token_string is not None:
                 Code.append(token.token.token_string)
-    CodeGenerator(Code)
+    show_code(Code)
 
-def CodeGenerator(Code):
+def show_code(Code):
     log(f"code : {Code}")
 
 
@@ -778,6 +734,61 @@ class Parser:
             raise NotDefinedCompileError()
 
         return [syntax_tree, symbol_table]
+
+
+class CodeGenerator:
+
+    TARGET_FILE_NAME = "targetCode.txt"
+
+    def __init__(self, code_table: list):
+        """
+        Args:
+            code_table: op, arg1, arg2, result 순서로 저장된 코드 테이블
+        """
+        self._code_table = code_table
+
+    def generate_code(self) -> None:
+        """코드 테이블의 내용을 파일에 작성한다.
+
+        Raises:
+            RuntimeError: 코드 테이블에 정의되지 않은 instruction이 있는 경우 발생한다.
+        """
+        file_writer = FileWriter(CodeGenerator.TARGET_FILE_NAME)
+
+        for intermediate_code in self._code_table:
+            if intermediate_code[0] == "LD":
+                # LD result, arg1 : arg1 주소에 있는 데이터를 result 레지스터에 저장한다.
+                file_writer.write(f"{self._code_table[0]} {self._code_table[3]}, {self._code_table[1]}")
+            elif intermediate_code[0] == "ST":
+                # ST arg1, arg2 : arg1 레지스터에 있는 데이터를 arg2 주소의 메모리에 저장한다.
+                file_writer.write(f"{self._code_table[0]} {self._code_table[1]}, {self._code_table[2]}")
+            elif intermediate_code[0] == "LDB":
+                # LDB result, arg1 : arg1 주소에 있는 byte단위 데이터를 result 레지스터에 저장한다.
+                file_writer.write(f"{self._code_table[0]} {self._code_table[3]}, {self._code_table[1]}")
+            elif intermediate_code[0] == "STB":
+                # STB arg1, arg2 : arg1 레지스터에 있는 데이터를 arg2 주소의 메모리에 저장한다.
+                file_writer.write(f"{self._code_table[0]} {self._code_table[1]}, {self._code_table[2]}")
+            elif intermediate_code[0] == "ADD":
+                # ADD result, arg1, arg2 : result = arg1 + arg2
+                file_writer.write(f"{self._code_table[0]} {self._code_table[3]}, {self._code_table[1]}, {self._code_table[2]}")
+            elif intermediate_code[0] == "MUL":
+                # MUL result, arg1, arg2 : result = arg1 * arg2
+                file_writer.write(f"{self._code_table[0]} {self._code_table[3]}, {self._code_table[1]}, {self._code_table[2]}")
+            elif intermediate_code[0] == "LT":
+                # LT result, arg1, arg2 : if (arg1 < arg2) result = 1 else result = 0
+                file_writer.write(f"{self._code_table[0]} {self._code_table[3]}, {self._code_table[1]}, {self._code_table[2]}")
+            elif intermediate_code[0] == "JUMPF":
+                # JUMPF arg1   arg2 : if (arg1 == 0) Jump to arg2
+                file_writer.write(f"{self._code_table[0]} {self._code_table[1]}   {self._code_table[2]}")
+            elif intermediate_code[0] == "JUMPT":
+                # JUMPT arg1   arg2 : if (arg1 != 0) Jump to arg2
+                file_writer.write(f"{self._code_table[0]} {self._code_table[1]}   {self._code_table[2]}")
+            elif intermediate_code[0] == "JUMP":
+                # JUMPT    arg1 : Jump to arg1
+                file_writer.write(f"{self._code_table[0]}    {self._code_table[1]}")
+            else:
+                # 정의되지 않은 instruction으로 코딩이 잘못된 경우임.
+                raise RuntimeError("정의되지 않은 instruction 사용!")
 
 
 class CompileError(Exception):
