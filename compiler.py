@@ -15,7 +15,7 @@ TAG = "Compiler"
 
 def log(content: str) -> None:
     """터미널에 로그를 찍기 위한 함수"""
-    print(f"{TAG} >> {content}")
+    # print(f"{TAG} >> {content}")
 
 
 class Token:
@@ -27,7 +27,7 @@ class Token:
             token: 토큰 종류
             token_string: 토큰에 대응하는 소스 코드 상의 문자열
             line_number: 토큰이 위치한 소스 코드 상의 줄 번호
-            block_number: 토큰이 속한 가장 가까운 블록 번호
+            block_number: 토큰이 속한 블록 번호
         """
         self._token = token
         self._token_string = token_string
@@ -298,15 +298,22 @@ class Compiler:
             file_path: 컴파일할 소스 코드가 작성된 파일의 주소
         """
         # file_path로 부터 소스 코드를 읽어온다.
-        log(f"다음의 경로에서 소스 코드를 불러옵니다 : {file_path}")
-        file_reader = FileReader(file_path)
-        source_code = file_reader.read_all()
-        log(f"읽어온 소스 코드::\n{source_code}\n")
-
-        scanner = Scanner(source_code)
-
         try:
+            log(f"다음의 경로에서 소스 코드를 불러옵니다 : {file_path}")
+            file_reader = FileReader(file_path)
+            source_code = file_reader.read_all()
+            log(f"읽어온 소스 코드::\n{source_code}\n")
+
+            scanner = Scanner(source_code)
             scanner.scan()
+
+            parser = Parser(scanner.get_token_queue(), source_code)
+
+            list = parser.parse()
+            syntax_tree = list[0]
+            symbol_table = list[1]
+            print(symbol_table.symbol_table)
+            Syntax_tree_Optimization(syntax_tree)
         except FileNotFoundError:
             log(f"다음의 주소에서 파일을 읽지 못했습니다 : {file_path}")
             return
@@ -316,16 +323,10 @@ class Compiler:
         except NotMatchedBraceError as e:
             print(e)
             return
-
-        parser = Parser(scanner.get_token_queue(), source_code)
-
-        try:
-            list = parser.parse()
-            syntax_tree = list[0]
-            symbol_table = list[1]
-            print(symbol_table.symbol_table)
-            Syntax_tree_Optimization(syntax_tree)
         except NoSemiColonError as e:
+            print(e)
+            return
+        except RedundantVariableDeclarationError as e:
             print(e)
             return
         except NotDefinedCompileError as e:
@@ -435,8 +436,6 @@ class Scanner:
 
         if left_brace_count != right_brace_count:
             raise NotMatchedBraceError()
-
-        log(f"토큰 목록::\n{self._tokens}\n")
 
     def get_token_queue(self) -> Queue:
         """토큰이 담긴 Queue를 반환한다.
@@ -672,12 +671,12 @@ class Parser:
 
         try:
             while not stack.is_empty():
-                #for tree_stack_node in parent_stack:
-                #    log(f"stack node : {tree_stack_node.token_node.token}")
-                #for token_node in syntax_tree:
-                #    log(f"node : {token_node.token} '{token_node.token.token_string}'")
+                for tree_stack_node in parent_stack:
+                   log(f"stack node : {tree_stack_node.token_node.token}")
+                for token_node in syntax_tree:
+                   log(f"node : {token_node.token} '{token_node.token.token_string}'")
 
-                #log(f"current node : {current_stack_node.token_node.token}")
+                log(f"current node : {current_stack_node.token_node.token}")
 
                 if self._token_queue.get().token == stack.get():
                     # 기호가 같을 때 pop
@@ -763,8 +762,9 @@ class Parser:
 
 
 class CodeGenerator:
+    """코드 생성을 담당하는 클래스"""
 
-    TARGET_FILE_NAME = "targetCode.txt"
+    TARGET_FILE_NAME = "targetCode.code"
 
     def __init__(self):
         self._code_table = []
@@ -822,12 +822,13 @@ class CodeGenerator:
 class CompileError(Exception):
     """컴파일 에러를 다루는 클래스"""
 
-    def __init__(self, source_code:str, error_token: Token, error_sentence = "", do_show_token = False, do_mark = False, do_mark_at_last = False):
+    def __init__(self, source_code:str, error_token: Token, error_sentence = "", do_show_line = False, do_show_token = False, do_mark = False, do_mark_at_last = False):
         """
         Args:
             source_code: 전체 소스코드
             error_token:  에러가 발생한 토큰
             error_sentence: 발생한 에러에 대한 요약 문장
+            do_show_line: 에러가 발생한 줄을 보여줄 것인지
             do_show_token: 에러가 발생한 토큰 문자열을 보여줄 것인지
             do_mark: 소스 코드 상 에러가 발생한 토큰이 위치한 곳을 보여줄 것인지
             do_mark_at_last: 소스 코드 상 에러가 발생한 토큰이 위치한 곳의 뒷 부분을 마크할 것인지 / False이면 앞부분을 마크
@@ -835,6 +836,7 @@ class CompileError(Exception):
         self._source_code = source_code
         self._error_token = error_token
         self._error_setence = error_sentence
+        self._do_show_line = do_show_line
         self._do_show_token = do_show_token
         self._do_mark = do_mark
         self._do_mark_at_last = do_mark_at_last
@@ -847,21 +849,22 @@ class CompileError(Exception):
         else:
             result_string += "\n"
 
-        if self._do_mark:
+        if self._do_show_line:
             code_list = self._source_code.split("\n")
             result_string += f"(line {self._error_token.line_number}):{code_list[self._error_token.line_number - 1]}\n"
 
-            # '^'로 표시
-            text_until_invalid_token = f"(line {self._error_token.line_number}):{code_list[self._error_token.line_number - 1]}\n".split(self._error_token.token_string)
+            if self._do_mark:
+                # '^'로 표시
+                text_until_invalid_token = f"(line {self._error_token.line_number}):{code_list[self._error_token.line_number - 1]}\n".split(self._error_token.token_string)
 
-            if self._do_mark_at_last:
-                for i in range(0, len(text_until_invalid_token[0]) + len(self._error_token.token_string)):
-                    result_string += " "
-            else:
-                for i in range(0, len(text_until_invalid_token[0])):
-                    result_string += " "
+                if self._do_mark_at_last:
+                    for i in range(0, len(text_until_invalid_token[0]) + len(self._error_token.token_string)):
+                        result_string += " "
+                else:
+                    for i in range(0, len(text_until_invalid_token[0])):
+                        result_string += " "
 
-            result_string += "^"
+                result_string += "^\n"
 
         return result_string
 
@@ -873,7 +876,7 @@ class InvalidTokenError(CompileError):
     """
 
     def __init__(self, source_code: str, error_token_str: str, line_number: int):
-        super().__init__(source_code, Token(None, error_token_str, line_number), "소스 코드에 인식할 수 없는 토큰이 있습니다", True, True)
+        super().__init__(source_code, Token(None, error_token_str, line_number, 0), "소스 코드에 인식할 수 없는 토큰이 있습니다", True, True, True)
 
 
 class NotMatchedBraceError(CompileError):
@@ -893,17 +896,17 @@ class RedundantVariableDeclarationError(CompileError):
     """
 
     def __init__(self, source_code: str, error_token: Token):
-        super().__init__(source_code, error_token, "다음의 변수가 중복 선언되었습니다", True, True)
+        super().__init__(source_code, error_token, "다음의 변수가 중복 선언되었습니다", True, True, True)
 
 
 class NoSemiColonError(CompileError):
     """구문 분석 중 소스 코드에서 세미 콜론이 필요한 곳에 없을 때 발생하는 에러
 
-    에러 발생 시 세미 콜론이 없음을 알리고, 소스 코드에서 세미 콜론이 필요한 부분을 표시한다.
+    에러 발생 시 세미 콜론이 없음을 알리고, 소스 코드에서 해당 줄을 표시한다.
     """
 
     def __init__(self, source_code: str, error_token: Token):
-        super().__init__(source_code, error_token, "소스 코드의 다음 위치에 ';'가 필요합니다", False, True, True)
+        super().__init__(source_code, error_token, "소스 코드의 다음 줄에 ';'가 필요합니다", True, True, True, True)
 
 
 class NoVariableDeclarationError(CompileError):
@@ -913,7 +916,7 @@ class NoVariableDeclarationError(CompileError):
     """
 
     def __init__(self, source_code: str, error_token: Token):
-        super().__init__(source_code, error_token, "다음 변수가 선언되지 않았습니다", True, True)
+        super().__init__(source_code, error_token, "다음 변수가 선언되지 않았습니다", True, True, True)
 
 
 class AccessingUninitializedVariableError(CompileError):
@@ -923,27 +926,26 @@ class AccessingUninitializedVariableError(CompileError):
     """
 
     def __init__(self, source_code: str, error_token: Token):
-        super().__init__(source_code, error_token, "초기화되지 않은 변수에 접근했습니다", True, True)
+        super().__init__(source_code, error_token, "초기화되지 않은 변수에 접근했습니다", True, True, True)
 
 
 class TypeCastingError(CompileError):
     """int 타입의 값을 char 변수에 넣으려할 때 발생하는 에러
-    
+
     에러 발생 시 잘못된 형변환임을 알리고, 해당 변수의 위치를 표시한다.
     """
 
     def __init__(self, source_code: str, error_token: Token):
-        super().__init__(source_code, error_token, "int형의 데이터를 char형에 저장할 수 없습니다.", False, True)
+        super().__init__(source_code, error_token, "int형의 데이터를 char형에 저장할 수 없습니다.", True, False, True)
 
 
 class NotDefinedCompileError(CompileError):
-    """컴파일 중 발생한 에러이지만, 원인을 알 수 없을 때 발생하는 에러"""
+    """구문 분석 중 발생한 에러지만, 원인을 알 수 없을 때 발생하는 에러"""
 
     def __init__(self):
-        super().__init__(None, None, "컴파일 중 에러가 발생하였으나, 원인을 알 수 없습니다")
+        super().__init__(None, None, "구문 분석 중 에러가 발생하였으나, 원인을 알 수 없습니다")
 
 
 compiler = Compiler()
-# file_path = input()
-file_path = "reference/sample.c"
+file_path = input("file path : ")
 compiler.compile(file_path)
