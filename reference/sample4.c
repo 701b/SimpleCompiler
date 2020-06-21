@@ -31,7 +31,7 @@ main()
             }
             ELSE
             {
-                iF koreanScore > cutlineD THEN
+                IF koreanScore > cutlineD THEN
                 {
                     koreanGrade = 68;
                 }
@@ -61,7 +61,7 @@ main()
             }
             ELSE
             {
-                iF englishScore > cutlineD THEN
+                IF englishScore > cutlineD THEN
                 {
                     englishGrade = 68;
                 }

@@ -6,10 +6,11 @@ main()
     fNum = 10;
     sNum = 5;
 
-    WHILE fNum > 5
+    WHILE 15 > fNum
     {
         int fNum;
 
-        fNum = fNum - 1
+        fNum = 1 + fNum;
     }
 }
+
