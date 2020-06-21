@@ -275,6 +275,10 @@ class SymbolTable:
                     # 스택이 빈 경우 -> 정의된 변수가 없음
                     raise NoVariableDeclarationError(self._source_code, token)
 
+    @property
+    def symbol_table(self) -> pd.DataFrame:
+        return self._symbol_table
+
 
 class Compiler:
     """컴파일러 클래스
@@ -319,7 +323,7 @@ class Compiler:
             list = parser.parse()
             syntax_tree = list[0]
             symbol_table = list[1]
-            print(symbol_table._symbol_table)
+            print(symbol_table.symbol_table)
             Syntax_tree_Optimization(syntax_tree)
         except NoSemiColonError as e:
             print(e)
@@ -763,7 +767,7 @@ class CodeGenerator:
     TARGET_FILE_NAME = "targetCode.txt"
 
     def __init__(self):
-        pass
+        self._code_table = []
 
     def generate_code(self) -> None:
         pass
@@ -772,12 +776,11 @@ class CodeGenerator:
         """코드 테이블의 내용을 파일에 작성한다.
 
         Raises:
-            RuntimeError: 코드 테이블에 정의되지 않은 instruction이 있는 경우 발생한다.
+            RuntimeError: 컴파일러 코딩이 잘못된 경우 발생한다.
         """
-        code_table = []
         file_writer = FileWriter(CodeGenerator.TARGET_FILE_NAME)
 
-        for intermediate_code in code_table:
+        for intermediate_code in self._code_table:
             if intermediate_code[0] == "LD":
                 # LD result, arg1 : arg1 주소에 있는 데이터를 result 레지스터에 저장한다.
                 file_writer.write(f"\t{intermediate_code[0]} {intermediate_code[3]}, {intermediate_code[1]}")
@@ -806,13 +809,13 @@ class CodeGenerator:
                 # JUMPT arg1   arg2 : if (arg1 != 0) Jump to arg2
                 file_writer.write(f"\t{intermediate_code[0]} {intermediate_code[1]}   {intermediate_code[2]}")
             elif intermediate_code[0] == "JUMP":
-                # JUMPT    arg1 : Jump to arg1
+                # JUMP    arg1 : Jump to arg1
                 file_writer.write(f"\t{intermediate_code[0]}    {intermediate_code[1]}")
             elif intermediate_code[0] == "LABEL":
                 # label:
                 file_writer.write(f"{intermediate_code[1]}:")
             else:
-                # 정의되지 않은 instruction으로 코딩이 잘못된 경우임.
+                # 정의되지 않은 instruction가 사용된 경우
                 raise RuntimeError("정의되지 않은 instruction 사용!")
 
 
@@ -921,6 +924,16 @@ class AccessingUninitializedVariableError(CompileError):
 
     def __init__(self, source_code: str, error_token: Token):
         super().__init__(source_code, error_token, "초기화되지 않은 변수에 접근했습니다", True, True)
+
+
+class TypeCastingError(CompileError):
+    """int 타입의 값을 char 변수에 넣으려할 때 발생하는 에러
+    
+    에러 발생 시 잘못된 형변환임을 알리고, 해당 변수의 위치를 표시한다.
+    """
+
+    def __init__(self, source_code: str, error_token: Token):
+        super().__init__(source_code, error_token, "int형의 데이터를 char형에 저장할 수 없습니다.", False, True)
 
 
 class NotDefinedCompileError(CompileError):
